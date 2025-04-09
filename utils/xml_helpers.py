@@ -112,17 +112,42 @@ def format_xml_string(xml_str, pretty_print=True):
     if not pretty_print:
         return xml_str
     
-    import xml.dom.minidom
+    # Try to use lxml for better formatting
+    try:
+        # Parse the string into an lxml ElementTree
+        root = etree.fromstring(xml_str.encode('utf-8'))
+        # Format with lxml's pretty_print
+        formatted_xml = etree.tostring(
+            root,
+            encoding='utf-8',
+            pretty_print=True
+        ).decode('utf-8')
+        
+        # Add XML declaration if needed
+        if not formatted_xml.startswith('<?xml'):
+            formatted_xml = '<?xml version="1.0" encoding="utf-8"?>\n' + formatted_xml
+            
+        return formatted_xml
     
-    # Parse the XML string
-    dom = xml.dom.minidom.parseString(xml_str)
-    
-    # Get pretty XML string with the xml declaration
-    formatted_xml = dom.toprettyxml(indent='  ')
-    
-    # Remove empty lines
-    lines = [line for line in formatted_xml.split('\n') if line.strip()]
-    return '\n'.join(lines)
+    except Exception as e:
+        # Fall back to minidom if lxml fails
+        print(f"Warning: lxml formatting failed, falling back to minidom: {str(e)}")
+        import xml.dom.minidom
+        
+        # Parse the XML string
+        try:
+            dom = xml.dom.minidom.parseString(xml_str)
+            
+            # Get pretty XML string with the xml declaration
+            formatted_xml = dom.toprettyxml(indent='  ')
+            
+            # Remove empty lines
+            lines = [line for line in formatted_xml.split('\n') if line.strip()]
+            return '\n'.join(lines)
+        except Exception as e2:
+            print(f"Warning: XML formatting failed completely: {str(e2)}")
+            # Return original if all else fails
+            return xml_str
 
 def format_timestamp(date_str):
     """
@@ -159,3 +184,63 @@ def validate_xml_against_schema(xml_string, schema_path):
         return True
     except Exception as e:
         raise ValueError(f"XML validation failed: {str(e)}")
+
+def fix_xml_structure(xml_string):
+    """
+    Fix common structural issues in XML files.
+    
+    Args:
+        xml_string (str): Original XML string
+        
+    Returns:
+        str: Corrected XML string
+    """
+    # Remove duplicate XML declarations
+    xml_decl_pattern = re.compile(r'<\?xml[^>]*\?>')
+    xml_decls = xml_decl_pattern.findall(xml_string)
+    if len(xml_decls) > 1:
+        for i in range(1, len(xml_decls)):
+            xml_string = xml_string.replace(xml_decls[i], '')
+    
+    # Remove duplicate DataServices processing instructions
+    ds_pattern = re.compile(r'<\?DataServices[^>]*\?>')
+    ds_instrs = ds_pattern.findall(xml_string)
+    if len(ds_instrs) > 1:
+        for i in range(1, len(ds_instrs)):
+            xml_string = xml_string.replace(ds_instrs[i], '')
+    
+    # Remove root tags if present
+    xml_string = re.sub(r'<root>\s*', '', xml_string)
+    xml_string = re.sub(r'\s*</root>', '', xml_string)
+    
+    # Fix TOPLEVEL tag if it's outside the export tag
+    if '</TOPLEVEL>' in xml_string and '</export>' in xml_string:
+        if xml_string.find('</TOPLEVEL>') > xml_string.find('</export>'):
+            xml_string = xml_string.replace('</TOPLEVEL>', '')
+            # Add it back inside export
+            xml_string = xml_string.replace('</export>', '</export>')
+    
+    # Ensure there's a closing export tag
+    if '<export>' in xml_string and '</export>' not in xml_string:
+        xml_string += '\n</export>'
+    
+    # Try to format the result
+    try:
+        # Parse the corrected string
+        root = etree.fromstring(xml_string.encode('utf-8'))
+        # Get the formatted result
+        result = etree.tostring(root, encoding='utf-8', pretty_print=True).decode('utf-8')
+        
+        # Add XML declaration
+        if not result.startswith('<?xml'):
+            result = '<?xml version="1.0" encoding="utf-8"?>\n' + result
+        
+        # Add DataServices PI if it was present
+        if ds_instrs and not '<?DataServices' in result:
+            result = result.replace('<?xml version="1.0" encoding="utf-8"?>\n', 
+                                   '<?xml version="1.0" encoding="utf-8"?>\n' + ds_instrs[0] + '\n\n')
+            
+        return result
+    except Exception as e:
+        print(f"Warning: XML reformatting failed: {str(e)}")
+        return xml_string
