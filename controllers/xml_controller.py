@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from config import active_config
 from models.schemas import PayloadSchema
 from services.xml_generator import XMLGenerator
+from utils.xml_helpers import load_xml_template
 
 # Create a blueprint for XML routes
 xml_bp = Blueprint('xml', __name__)
@@ -98,3 +99,89 @@ def download_xml(filename):
         attachment_filename=filename,
         mimetype='application/xml'
     )
+
+@xml_bp.route('/validate', methods=['POST'])
+def validate_payload():
+    """
+    Validate a JSON payload without generating an XML file.
+    
+    Validates the structure and data types of the input JSON against the schema
+    without performing the full XML generation process.
+    
+    Returns:
+        JSON response with validation results
+    """
+    try:
+        schema = PayloadSchema()
+        payload = schema.load(request.json)
+        return jsonify({
+            'status': 'success',
+            'message': 'Payload is valid',
+            'validation': True
+        })
+    except ValidationError as e:
+        return jsonify({
+            'status': 'error',
+            'message': 'Validation error',
+            'errors': e.messages,
+            'validation': False
+        }), 400
+
+@xml_bp.route('/template-info', methods=['GET'])
+def get_template_info():
+    """
+    Get information about the XML template structure.
+    
+    Returns information about the elements and attributes in the base template,
+    useful for understanding the expected structure of the generated XML.
+    
+    Returns:
+        JSON response with template element information
+    """
+    try:
+        tree = load_xml_template(active_config.BASE_TEMPLATE_PATH)
+        root = tree.getroot()
+        
+        # Extract information about elements
+        elements = {}
+        for child in root.findall(".//export/*"):
+            tag = child.tag
+            if tag not in elements:
+                elements[tag] = []
+            
+            attrs = {attr: value for attr, value in child.attrib.items()}
+            if attrs not in elements[tag]:
+                elements[tag].append(attrs)
+        
+        return jsonify({
+            'status': 'success',
+            'template_elements': elements
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@xml_bp.route('/schema', methods=['GET'])
+def get_schema():
+    """
+    Get the JSON schema for API payload validation.
+    
+    Returns a schema description that can be used to understand the expected
+    structure and requirements of the input payload.
+    
+    Returns:
+        JSON response with schema information
+    """
+    try:
+        schema = PayloadSchema()
+        return jsonify({
+            'status': 'success',
+            'schema': schema.fields
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500

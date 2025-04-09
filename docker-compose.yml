@@ -1,0 +1,21 @@
+services:
+  xml-generator-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: xml-generator-api
+    restart: unless-stopped
+    ports:
+      - "5055:5000"
+    volumes:
+      - ./output:/app/output
+      - ./templates:/app/templates
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

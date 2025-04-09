@@ -82,6 +82,48 @@ class CasingAssemblySchema(Schema):
     baseDepth = fields.Float(required=True)
     components = fields.List(fields.Nested(CasingComponentSchema))
 
+class DLSOverrideSchema(Schema):
+    """Validation schema for dogleg severity overrides."""
+    overrideId = fields.String()
+    topDepth = fields.Float(required=True)
+    baseDepth = fields.Float(required=True)
+    doglegSeverity = fields.Float(required=True)
+
+class DLSOverrideGroupSchema(Schema):
+    """Validation schema for dogleg severity override groups."""
+    groupId = fields.String()
+    scenarioId = fields.String()
+    wellboreId = fields.String()
+    overrides = fields.List(fields.Nested(DLSOverrideSchema), required=True)
+
+class SurveyStationSchema(Schema):
+    """Validation schema for definitive survey stations."""
+    stationId = fields.String()
+    azimuth = fields.Float(required=True)
+    inclination = fields.Float(required=True)
+    md = fields.Float(required=True)
+    tvd = fields.Float()
+    doglegSeverity = fields.Float()
+    sequenceNo = fields.Integer()
+    dataEntryMode = fields.Integer()
+
+class SurveyHeaderSchema(Schema):
+    """Validation schema for definitive survey headers."""
+    headerId = fields.String()
+    wellboreId = fields.String()
+    name = fields.String(required=True)
+    phase = fields.String()
+    bhMd = fields.Float()
+    interpolationInterval = fields.Float()
+    stations = fields.List(fields.Nested(SurveyStationSchema))
+
+class DatumSchema(Schema):
+    """Validation schema for datum information."""
+    datumId = fields.String()
+    wellId = fields.String()
+    datumName = fields.String(required=True)
+    datumElevation = fields.Float(required=True)
+
 class ProjectInfoSchema(Schema):
     """Validation schema for project information."""
     site = fields.Nested(SiteSchema)
@@ -92,6 +134,8 @@ class FormationInputsSchema(Schema):
     """Validation schema for formation inputs."""
     temperatureProfiles = fields.List(fields.Nested(TemperatureProfileSchema))
     pressureProfiles = fields.List(fields.Nested(PressureProfileSchema))
+    dlsOverrideGroup = fields.Nested(DLSOverrideGroupSchema)
+    surveyHeader = fields.Nested(SurveyHeaderSchema)
 
 class CasingSchematifsSchema(Schema):
     """Validation schema for casing schematics."""
@@ -103,3 +147,4 @@ class PayloadSchema(Schema):
     projectInfo = fields.Nested(ProjectInfoSchema, required=True)
     formationInputs = fields.Nested(FormationInputsSchema)
     casingSchematics = fields.Nested(CasingSchematifsSchema)
+    datum = fields.Nested(DatumSchema)
