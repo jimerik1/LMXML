@@ -3,6 +3,49 @@ import xml.etree.ElementTree as ET
 import re
 from lxml import etree
 
+# Define standard attribute order
+ATTRIBUTE_ORDER = [
+    # Primary entities
+    "WELL_ID", "WELLBORE_ID", "SITE_ID", "PROJECT_ID",
+    # Secondary entities  
+    "ASSEMBLY_ID", "ASSEMBLY_COMP_ID", "SCENARIO_ID", "CASE_ID",
+    "DATUM_ID", "ORIGINAL_TUBULAR_DATUM_ID",
+    "DLS_OVERRIDE_GROUP_ID", "DLS_OVERRIDE_ID",
+    "TEMP_GRADIENT_GROUP_ID", "TEMP_GRADIENT_ID",
+    "PORE_PRESSURE_GROUP_ID", "PORE_PRESSURE_ID", 
+    "FRAC_GRADIENT_GROUP_ID", "FRAC_GRADIENT_ID",
+    "DEF_SURVEY_HEADER_ID", "DEFINITIVE_SURVEY_ID",
+    # Entity identifiers
+    "PACKER_NAME", "NAME", "PHASE", "TIGHT_GROUP_ID", "WELLBORE_NAME", "WELL_COMMON_NAME", 
+    # Structural attributes
+    "IS_LINKED", "SEQUENCE_NO", "IS_ACTIVE", "IS_READONLY", "IS_OFFSHORE",
+    # Physical attributes
+    "STRING_TYPE", "STRING_CLASS", "ASSEMBLY_SIZE", "HOLE_SIZE", "ASSEMBLY_NAME", "CASE_NAME",
+    "MD_ASSEMBLY_TOP", "MD_ASSEMBLY_BASE", "MD_TOC",
+    "TOP_DEPTH", "BASE_DEPTH", "MD_TOP", "MD_BASE", "LENGTH", "DEPTH",
+    # Creation/update metadata (always at the end)
+    "CREATE_DATE", "CREATE_USER_ID", "CREATE_APP_ID", 
+    "UPDATE_DATE", "UPDATE_USER_ID", "UPDATE_APP_ID"
+]
+
+def set_attributes_ordered(element, attributes):
+    """
+    Set attributes on an XML element in a consistent order.
+    
+    Args:
+        element: The XML element
+        attributes: Dictionary of attribute name-value pairs
+    """
+    # First set attributes in the defined order
+    for attr in ATTRIBUTE_ORDER:
+        if attr in attributes:
+            element.set(attr, str(attributes[attr]))
+    
+    # Then set any remaining attributes that weren't in our order list
+    for attr, value in attributes.items():
+        if attr not in ATTRIBUTE_ORDER:
+            element.set(attr, str(value))
+
 def load_xml_template(template_path):
     """
     Load an XML template from a file path.
@@ -70,8 +113,7 @@ def create_or_update_element(parent, tag_name, attributes):
         Element: Created or updated element
     """
     element = etree.SubElement(parent, tag_name)
-    for attr, value in attributes.items():
-        element.set(attr, str(value))
+    set_attributes_ordered(element, attributes)
     return element
 
 def xml_to_string(root, pretty_print=True):
@@ -187,13 +229,13 @@ def validate_xml_against_schema(xml_string, schema_path):
 
 def fix_xml_structure(xml_string):
     """
-    Fix common structural issues in XML files.
+    Fix common structural issues in XML files and ensure proper formatting.
     
     Args:
         xml_string (str): Original XML string
         
     Returns:
-        str: Corrected XML string
+        str: Corrected XML string with each element on its own line
     """
     # Remove duplicate XML declarations
     xml_decl_pattern = re.compile(r'<\?xml[^>]*\?>')
@@ -224,7 +266,38 @@ def fix_xml_structure(xml_string):
     if '<export>' in xml_string and '</export>' not in xml_string:
         xml_string += '\n</export>'
     
-    # Try to format the result
+    # Helper function to ensure elements are on new lines with proper indentation
+    def ensure_elements_on_new_lines(xml_str):
+        # Add a newline after each closing tag if not already present
+        xml_str = re.sub(r'>([ \t]*)<', '>\n<', xml_str)
+        
+        # Replace multiple newlines with a single newline
+        xml_str = re.sub(r'\n+', '\n', xml_str)
+        
+        # Add proper indentation
+        lines = xml_str.split('\n')
+        indent_level = 0
+        result_lines = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Check if the line is a closing tag
+            if line.startswith('</'):
+                indent_level = max(0, indent_level - 1)
+            
+            # Add the indented line
+            result_lines.append('  ' * indent_level + line)
+            
+            # Check if the line is an opening tag and not a self-closing tag
+            if '<' in line and '>' in line and not (line.startswith('<?') or '/>' in line or '</' in line):
+                indent_level += 1
+        
+        return '\n'.join(result_lines)
+    
+    # Try to format the result using lxml
     try:
         # Parse the corrected string
         root = etree.fromstring(xml_string.encode('utf-8'))
@@ -236,11 +309,15 @@ def fix_xml_structure(xml_string):
             result = '<?xml version="1.0" encoding="utf-8"?>\n' + result
         
         # Add DataServices PI if it was present
-        if ds_instrs and not '<?DataServices' in result:
+        if ds_instrs and '<?DataServices' not in result:
             result = result.replace('<?xml version="1.0" encoding="utf-8"?>\n', 
                                    '<?xml version="1.0" encoding="utf-8"?>\n' + ds_instrs[0] + '\n\n')
-            
+        
+        # Ensure elements are on new lines with proper formatting
+        result = ensure_elements_on_new_lines(result)
+        
         return result
     except Exception as e:
         print(f"Warning: XML reformatting failed: {str(e)}")
-        return xml_string
+        # If lxml formatting fails, try the manual approach
+        return ensure_elements_on_new_lines(xml_string)

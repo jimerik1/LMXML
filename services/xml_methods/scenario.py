@@ -1,5 +1,6 @@
 # services/xml_methods/scenario.py
 from lxml import etree as ET
+from utils.xml_helpers import set_attributes_ordered
 from services.xml_methods.utils import add_creation_info
 
 def add_scenario_element(generator, export_elem):
@@ -24,41 +25,42 @@ def add_scenario_element(generator, export_elem):
     if not scenario_ids or not wellbore_ids or not well_ids:
         return
     
-    # Create scenario element
-    scenario_elem = ET.SubElement(export_elem, "CD_SCENARIO")
-    
-    # Set IDs
-    scenario_elem.set("SCENARIO_ID", scenario_ids[0])
-    scenario_elem.set("WELLBORE_ID", wellbore_ids[0])
-    scenario_elem.set("WELL_ID", well_ids[0])
-    
-    # Set phase
-    scenario_elem.set("PHASE", "PROTOTYPE")
+    # Prepare attributes for scenario element
+    attributes = {
+        "WELL_ID": well_ids[0],
+        "WELLBORE_ID": wellbore_ids[0],
+        "SCENARIO_ID": scenario_ids[0],
+        "PHASE": "PROTOTYPE"
+    }
     
     # Set related IDs if available
     if datum_ids:
-        scenario_elem.set("DATUM_ID", datum_ids[0])
-        scenario_elem.set("ORIGINAL_TUBULAR_DATUM_ID", datum_ids[0])
+        attributes["DATUM_ID"] = datum_ids[0]
+        attributes["ORIGINAL_TUBULAR_DATUM_ID"] = datum_ids[0]
     
     if temp_group_ids:
-        scenario_elem.set("TEMP_GRADIENT_GROUP_ID", temp_group_ids[0])
+        attributes["TEMP_GRADIENT_GROUP_ID"] = temp_group_ids[0]
     
     if pore_group_ids:
-        scenario_elem.set("PORE_PRESSURE_GROUP_ID", pore_group_ids[0])
+        attributes["PORE_PRESSURE_GROUP_ID"] = pore_group_ids[0]
     
     if frac_group_ids:
-        scenario_elem.set("FRAC_GRADIENT_GROUP_ID", frac_group_ids[0])
+        attributes["FRAC_GRADIENT_GROUP_ID"] = frac_group_ids[0]
     
     if survey_header_ids:
-        scenario_elem.set("DEF_SURVEY_HEADER_ID", survey_header_ids[0])
+        attributes["DEF_SURVEY_HEADER_ID"] = survey_header_ids[0]
     
     # Set name from well info if available
     well_data = generator.id_registry.get_entity_data('WELL', well_ids[0])
     if well_data and 'wellCommonName' in well_data:
-        scenario_elem.set("NAME", well_data['wellCommonName'])
+        attributes["NAME"] = well_data['wellCommonName']
     else:
         # Use a default name
-        scenario_elem.set("NAME", "Scenario")
+        attributes["NAME"] = "Scenario"
+    
+    # Create scenario element
+    scenario_elem = ET.SubElement(export_elem, "CD_SCENARIO")
+    set_attributes_ordered(scenario_elem, attributes)
     
     # Add creation info
     add_creation_info(generator, scenario_elem)
@@ -98,30 +100,28 @@ def add_case_elements(generator, export_elem):
         if not assembly_id:
             continue
         
-        # Create case element
-        case_elem = ET.SubElement(export_elem, "CD_CASE")
-        
-        # Set IDs
-        case_elem.set("CASE_ID", case_id)
-        case_elem.set("SCENARIO_ID", scenario_ids[0])
-        case_elem.set("ASSEMBLY_ID", assembly_id)
-        
-        if wellbore_ids:
-            case_elem.set("WELLBORE_ID", wellbore_ids[0])
-        
-        if well_ids:
-            case_elem.set("WELL_ID", well_ids[0])
-        
-        # Set linked flag and sequence number
-        case_elem.set("IS_LINKED", "Y")
-        case_elem.set("SEQUENCE_NO", str(float(i)))
-        
-        # Set name from assembly
+        # Set case name from assembly
         assembly_data = generator.id_registry.get_entity_data('ASSEMBLY', assembly_id)
         if assembly_data and 'assemblyName' in assembly_data:
-            case_elem.set("CASE_NAME", assembly_data['assemblyName'])
+            case_name = assembly_data['assemblyName']
         else:
-            case_elem.set("CASE_NAME", f"Case {i+1}")
+            case_name = f"Case {i+1}"
+        
+        # Prepare attributes for case element
+        attributes = {
+            "WELL_ID": well_ids[0] if well_ids else "",
+            "WELLBORE_ID": wellbore_ids[0] if wellbore_ids else "",
+            "CASE_ID": case_id,
+            "SCENARIO_ID": scenario_ids[0],
+            "ASSEMBLY_ID": assembly_id,
+            "IS_LINKED": "Y",
+            "SEQUENCE_NO": str(float(i)),
+            "CASE_NAME": case_name
+        }
+        
+        # Create case element
+        case_elem = ET.SubElement(export_elem, "CD_CASE")
+        set_attributes_ordered(case_elem, attributes)
         
         # Add creation info
         add_creation_info(generator, case_elem)

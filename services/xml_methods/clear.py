@@ -93,12 +93,16 @@ def clear_template_elements(generator, export_elem, payload):
         for datum in export_elem.findall("./CD_DATUM"):
             export_elem.remove(datum)
     
-    # Clear any existing cases and scenarios
+    # Always clear existing cases and scenarios - this prevents duplicates
     for case in export_elem.findall("./CD_CASE"):
         export_elem.remove(case)
     
     for scenario in export_elem.findall("./CD_SCENARIO"):
         export_elem.remove(scenario)
+    
+    # Clear any packer elements
+    for packer in export_elem.findall("./CD_WEQP_PACKER"):
+        export_elem.remove(packer)
         
     # Always clear any existing BINARY_DATA elements
     for binary_data in export_elem.findall("./BINARY_DATA"):

@@ -134,26 +134,32 @@ def generate_xml(generator, payload):
     # Clear existing elements that will be replaced
     generator._clear_template_elements(export_elem, payload)
     
-    # Update the XML structure
+    # Update project information first (site, well, wellbore)
     generator._update_project_info(export_elem, payload.get('projectInfo', {}))
-    generator._update_formation_inputs(export_elem, payload.get('formationInputs', {}))
-    generator._update_casing_schematics(export_elem, payload.get('casingSchematics', {}))
+    
+    # Add scenario element right after project info
+    generator._add_scenario_element(export_elem)
     
     # Update DLS overrides
     if 'formationInputs' in payload and 'dlsOverrideGroup' in payload['formationInputs']:
         generator._update_dls_overrides(export_elem, payload['formationInputs']['dlsOverrideGroup'])
     
+    # Update assembly information
+    generator._update_casing_schematics(export_elem, payload.get('casingSchematics', {}))
+    
     # Update survey header and stations
     if 'formationInputs' in payload and 'surveyHeader' in payload['formationInputs']:
         generator._update_survey_header(export_elem, payload['formationInputs']['surveyHeader'])
+    
+    # Update formation inputs (temperature, pressure profiles)
+    generator._update_formation_inputs(export_elem, payload.get('formationInputs', {}))
     
     # Update datum
     if 'datum' in payload:
         generator._update_datum(export_elem, payload['datum'])
     
-    # Add scenario element - MUST BE DONE AFTER ALL OTHER ELEMENTS ARE ADDED
-    # so we have proper IDs to reference
-    generator._add_scenario_element(export_elem)
+    # Add case elements linking scenarios to assemblies
+    generator._add_case_elements(export_elem)
     
     # Validate relationships
     validation_errors = generator.id_registry.validate_references()

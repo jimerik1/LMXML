@@ -1,6 +1,6 @@
 # services/xml_methods/casing.py
 from lxml import etree as ET
-from utils.xml_helpers import convert_camel_to_xml_key
+from utils.xml_helpers import convert_camel_to_xml_key, set_attributes_ordered
 from services.xml_methods.utils import add_creation_info
 
 def update_casing_schematics(generator, export_elem, casing_schematics):
@@ -22,34 +22,39 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
     # Update materials
     if 'materials' in casing_schematics:
         for material in casing_schematics['materials']:
-            mat_elem = ET.SubElement(export_elem, "CD_MATERIAL")
+            # Prepare attributes
+            attributes = {}
             
             # Set ID
             if 'materialId' in material:
-                mat_elem.set("MATERIAL_ID", material['materialId'])
+                attributes["MATERIAL_ID"] = material['materialId']
             
             # Set required attributes for material
             if 'grade' in material:
-                mat_elem.set("GRADE", str(material['grade']))
+                attributes["GRADE"] = str(material['grade'])
             if 'thermalExpansionCoef' in material:
-                mat_elem.set("THERMAL_EXPANSION_COEF", str(material['thermalExpansionCoef']))
+                attributes["THERMAL_EXPANSION_COEF"] = str(material['thermalExpansionCoef'])
             if 'poissonsRatio' in material:
-                mat_elem.set("POISSONS_RATIO", str(material['poissonsRatio']))
+                attributes["POISSONS_RATIO"] = str(material['poissonsRatio'])
             if 'ultimateTensileStrength' in material:
-                mat_elem.set("ULTIMATE_TENSILE_STRENGTH", str(material['ultimateTensileStrength']))
+                attributes["ULTIMATE_TENSILE_STRENGTH"] = str(material['ultimateTensileStrength'])
             if 'minYieldStress' in material:
-                mat_elem.set("MIN_YIELD_STRESS", str(material['minYieldStress']))
+                attributes["MIN_YIELD_STRESS"] = str(material['minYieldStress'])
             
             # Material name is required
             if 'materialName' in material:
-                mat_elem.set("MATERIAL_NAME", material['materialName'])
+                attributes["MATERIAL_NAME"] = material['materialName']
             
             # Set other attributes
             for key, value in material.items():
                 if key not in ['materialId', 'grade', 'thermalExpansionCoef', 'poissonsRatio', 
                               'ultimateTensileStrength', 'minYieldStress', 'materialName']:
                     xml_key = convert_camel_to_xml_key(key)
-                    mat_elem.set(xml_key, str(value))
+                    attributes[xml_key] = str(value)
+            
+            # Create material element
+            mat_elem = ET.SubElement(export_elem, "CD_MATERIAL")
+            set_attributes_ordered(mat_elem, attributes)
             
             # Add creation info
             add_creation_info(generator, mat_elem)
@@ -57,98 +62,108 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
     # Update assemblies
     if 'assemblies' in casing_schematics:
         for assembly in casing_schematics['assemblies']:
-            # Create assembly element
-            assembly_elem = ET.SubElement(export_elem, "CD_ASSEMBLY")
+            # Prepare attributes
+            attributes = {}
             
             # Set IDs
             if 'assemblyId' in assembly:
-                assembly_elem.set("ASSEMBLY_ID", assembly['assemblyId'])
+                attributes["ASSEMBLY_ID"] = assembly['assemblyId']
             
-            # Set wellbore ID
+            # Set wellbore ID and well ID
             if wellbore_ids:
-                assembly_elem.set("WELLBORE_ID", wellbore_ids[0])
+                attributes["WELLBORE_ID"] = wellbore_ids[0]
                 # Set well ID if available
                 if well_ids:
-                    assembly_elem.set("WELL_ID", well_ids[0])
+                    attributes["WELL_ID"] = well_ids[0]
             
             # Set required attributes for assembly
             if 'topDepth' in assembly:
-                assembly_elem.set("TOP_DEPTH", str(assembly['topDepth']))
-                assembly_elem.set("MD_ASSEMBLY_TOP", str(assembly['topDepth']))
-                assembly_elem.set("MD_TOC", str(assembly['topDepth']))
+                attributes["TOP_DEPTH"] = str(assembly['topDepth'])
+                attributes["MD_ASSEMBLY_TOP"] = str(assembly['topDepth'])
+                attributes["MD_TOC"] = str(assembly['topDepth'])
             
             if 'baseDepth' in assembly:
-                assembly_elem.set("BASE_DEPTH", str(assembly['baseDepth']))
-                assembly_elem.set("MD_ASSEMBLY_BASE", str(assembly['baseDepth']))
+                attributes["BASE_DEPTH"] = str(assembly['baseDepth'])
+                attributes["MD_ASSEMBLY_BASE"] = str(assembly['baseDepth'])
             
             # Set other attributes
             for key, value in assembly.items():
                 if key not in ['assemblyId', 'wellboreId', 'components', 'topDepth', 'baseDepth']:
                     xml_key = convert_camel_to_xml_key(key)
-                    assembly_elem.set(xml_key, str(value))
+                    attributes[xml_key] = str(value)
             
-            # Add creation info and standard flags
+            # Add standard flags
+            attributes["IS_TOP_DOWN"] = "Y"
+            
+            # Create assembly element
+            assembly_elem = ET.SubElement(export_elem, "CD_ASSEMBLY")
+            set_attributes_ordered(assembly_elem, attributes)
+            
+            # Add creation info
             add_creation_info(generator, assembly_elem)
-            assembly_elem.set("IS_TOP_DOWN", "Y")
             
             # Update components
             if 'components' in assembly:
                 for i, component in enumerate(assembly['components']):
-                    # Create component element
-                    comp_elem = ET.SubElement(export_elem, "CD_ASSEMBLY_COMP")
+                    # Prepare attributes
+                    comp_attributes = {}
                     
                     # Set IDs
                     if 'componentId' in component:
-                        comp_elem.set("ASSEMBLY_COMP_ID", component['componentId'])
+                        comp_attributes["ASSEMBLY_COMP_ID"] = component['componentId']
                     
                     # Set assembly ID
                     if 'assemblyId' in assembly:
-                        comp_elem.set("ASSEMBLY_ID", assembly['assemblyId'])
+                        comp_attributes["ASSEMBLY_ID"] = assembly['assemblyId']
                     
                     # Set wellbore and well IDs
                     if wellbore_ids:
-                        comp_elem.set("WELLBORE_ID", wellbore_ids[0])
+                        comp_attributes["WELLBORE_ID"] = wellbore_ids[0]
                         if well_ids:
-                            comp_elem.set("WELL_ID", well_ids[0])
+                            comp_attributes["WELL_ID"] = well_ids[0]
                     
                     # Set component type
                     comp_type = component.get('componentType', '').upper()
                     if comp_type == 'CASING':
-                        comp_elem.set("SECT_TYPE_CODE", "CAS")
-                        comp_elem.set("COMP_TYPE_CODE", "CAS")
+                        comp_attributes["SECT_TYPE_CODE"] = "CAS"
+                        comp_attributes["COMP_TYPE_CODE"] = "CAS"
                     elif comp_type == 'TUBING':
-                        comp_elem.set("SECT_TYPE_CODE", "TUB")
-                        comp_elem.set("COMP_TYPE_CODE", "TUB")
+                        comp_attributes["SECT_TYPE_CODE"] = "TUB"
+                        comp_attributes["COMP_TYPE_CODE"] = "TUB"
                     elif comp_type == 'LINER':
-                        comp_elem.set("SECT_TYPE_CODE", "LIN")
-                        comp_elem.set("COMP_TYPE_CODE", "LIN")
+                        comp_attributes["SECT_TYPE_CODE"] = "LIN"
+                        comp_attributes["COMP_TYPE_CODE"] = "LIN"
                     
                     # Set material ID if provided
                     if 'materialId' in component:
-                        comp_elem.set("MATERIAL_ID", component['materialId'])
+                        comp_attributes["MATERIAL_ID"] = component['materialId']
                     
                     # Set other attributes with appropriate naming conversion
                     for key, value in component.items():
                         if key not in ['componentId', 'assemblyId', 'wellboreId', 'componentType', 'materialId']:
                             # Handle special naming cases
                             if key == 'outerDiameter':
-                                comp_elem.set("OD_BODY", str(value))
+                                comp_attributes["OD_BODY"] = str(value)
                             elif key == 'innerDiameter':
-                                comp_elem.set("ID_BODY", str(value))
+                                comp_attributes["ID_BODY"] = str(value)
                             elif key == 'topDepth':
-                                comp_elem.set("MD_TOP", str(value))
+                                comp_attributes["MD_TOP"] = str(value)
                             elif key == 'bottomDepth':
-                                comp_elem.set("MD_BASE", str(value))
+                                comp_attributes["MD_BASE"] = str(value)
                             elif key == 'axialStrength':
-                                comp_elem.set("AXIAL_RATING", str(value))
+                                comp_attributes["AXIAL_RATING"] = str(value)
                             elif key == 'weight':
-                                comp_elem.set("APPROXIMATE_WEIGHT", str(value))
+                                comp_attributes["APPROXIMATE_WEIGHT"] = str(value)
                             else:
                                 xml_key = convert_camel_to_xml_key(key)
-                                comp_elem.set(xml_key, str(value))
+                                comp_attributes[xml_key] = str(value)
                     
                     # Set sequence number
-                    comp_elem.set("SEQUENCE_NO", str(float(i)))
+                    comp_attributes["SEQUENCE_NO"] = str(float(i))
+                    
+                    # Create component element
+                    comp_elem = ET.SubElement(export_elem, "CD_ASSEMBLY_COMP")
+                    set_attributes_ordered(comp_elem, comp_attributes)
                     
                     # Add creation info
                     add_creation_info(generator, comp_elem)
