@@ -87,6 +87,12 @@ def add_case_elements(generator, export_elem):
     if not scenario_ids or not assembly_ids or not case_ids:
         return
     
+    # Check if we already have CD_CASE elements to avoid duplication
+    existing_cases = export_elem.findall("./CD_CASE")
+    if existing_cases:
+        # If we already have case elements, don't add more
+        return
+    
     # Get relationships between cases, scenarios and assemblies
     for i, case_id in enumerate(case_ids):
         # Get related assembly

@@ -158,8 +158,8 @@ def generate_xml(generator, payload):
     if 'datum' in payload:
         generator._update_datum(export_elem, payload['datum'])
     
-    # Add case elements linking scenarios to assemblies
-    generator._add_case_elements(export_elem)
+    # REMOVED: Not calling add_case_elements here since it's now only called in _add_scenario_element
+    # This prevents case elements from being duplicated
     
     # Validate relationships
     validation_errors = generator.id_registry.validate_references()
