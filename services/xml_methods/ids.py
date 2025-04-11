@@ -12,6 +12,14 @@ def prepare_ids(generator, payload):
     # Clear existing IDs to ensure fresh generation
     generator.id_registry = IDRegistry()
     
+    # Register the policy ID that's required for binary data references
+    policy_id = "Pzrgw9f4JC"  # Keep this constant as it's referenced in binary data
+    generator.id_registry.register_entity('POLICY', policy_id, {'name': 'CONCEPT WELL PLANNING - NL'})
+    
+    # Register project ID for binary data references
+    project_id = "dzwLFOVy7l"  # You might want to make this configurable
+    generator.id_registry.register_entity('PROJECT', project_id, {'name': 'Default Project'})
+    
     # Project info IDs
     project_info = payload.get('projectInfo', {})
     
@@ -21,6 +29,12 @@ def prepare_ids(generator, payload):
         site['siteId'] = generator.id_registry.generate_id('SITE')
     elif site and site.get('siteId'):
         generator.id_registry.register_entity('SITE', site['siteId'], site)
+    
+    # Register site-project relationship
+    if site and site.get('siteId'):
+        if not 'projectId' in site:
+            site['projectId'] = project_id
+        generator.id_registry.register_relationship('PROJECT', project_id, 'SITE', site['siteId'])
     
     # Well ID
     well = project_info.get('well', {})
@@ -51,6 +65,9 @@ def prepare_ids(generator, payload):
                                            {'name': well.get('wellCommonName', 'Scenario')})
         generator.id_registry.register_relationship('WELL', well['wellId'], 'SCENARIO', scenario_id)
         generator.id_registry.register_relationship('WELLBORE', wellbore['wellboreId'], 'SCENARIO', scenario_id)
+        
+        # Add policy-scenario relationship for binary data references
+        generator.id_registry.register_relationship('POLICY', policy_id, 'SCENARIO', scenario_id)
     
     # Handle DLS overrides
     formation_inputs = payload.get('formationInputs', {})

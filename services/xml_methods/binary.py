@@ -37,6 +37,9 @@ def inject_binary_data(generator, export_elem):
             well_ids = generator.id_registry.id_map.get('WELL', [])
             wellbore_ids = generator.id_registry.id_map.get('WELLBORE', [])
             scenario_ids = generator.id_registry.id_map.get('SCENARIO', [])
+            site_ids = generator.id_registry.id_map.get('SITE', [])
+            project_ids = ['dzwLFOVy7l']  # Hard-coded for now or retrieve from registry
+            policy_ids = ['Pzrgw9f4JC']   # Keep this constant - referred elsewhere
             
             # Process each attachment journal
             for journal_elem in binary_data_elem.findall("./CD_ATTACHMENT_JOURNAL"):
@@ -54,27 +57,37 @@ def inject_binary_data(generator, export_elem):
                     elif key == "attachment_journal_id":
                         new_journal.set(key, attachment_journal_id)
                     elif key == "attachment_locator":
-                        # Update the locator with our generated IDs
+                        # Handle the composite locator string
                         locator = value
                         
-                        # Keep policy_id consistent
-                        if "policy_id=" in locator and "policy_id=(Pzrgw9f4JC)" in locator:
-                            # Don't change this ID as it's referenced elsewhere
-                            pass
+                        # Create a new locator with our IDs
+                        parts = {}
+                        for part in locator.split('+'):
+                            if '=' in part:
+                                name, id_value = part.split('=', 1)
+                                # Strip parentheses
+                                if id_value.startswith('(') and id_value.endswith(')'):
+                                    id_value = id_value[1:-1]
+                                parts[name] = id_value
                         
-                        # Replace well_id if we have one
-                        if well_ids and "well_id=" in locator:
-                            locator = update_locator_id(generator, locator, "well_id=", well_ids[0])
+                        # Update with our IDs but keep policy_id constant
+                        if policy_ids:
+                            parts['policy_id'] = policy_ids[0]
+                        if project_ids:
+                            parts['project_id'] = project_ids[0]
+                        if site_ids:
+                            parts['site_id'] = site_ids[0]
+                        if well_ids:
+                            parts['well_id'] = well_ids[0]
+                        if wellbore_ids:
+                            parts['wellbore_id'] = wellbore_ids[0]
+                        if scenario_ids:
+                            parts['scenario_id'] = scenario_ids[0]
                         
-                        # Replace wellbore_id if we have one
-                        if wellbore_ids and "wellbore_id=" in locator:
-                            locator = update_locator_id(generator, locator, "wellbore_id=", wellbore_ids[0])
+                        # Reconstruct the locator string
+                        new_locator = '+'.join([f"{name}=({value})" for name, value in parts.items()])
                         
-                        # Replace scenario_id if we have one
-                        if scenario_ids and "scenario_id=" in locator:
-                            locator = update_locator_id(generator, locator, "scenario_id=", scenario_ids[0])
-                        
-                        new_journal.set(key, locator)
+                        new_journal.set(key, new_locator)
                     else:
                         new_journal.set(key, value)
                 

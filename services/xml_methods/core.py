@@ -20,6 +20,16 @@ def initialize(generator, base_template_path):
     
     # Set the binary data library path
     generator.binary_data_path = os.path.join(generator.template_dir, 'binary_data_library.xml')
+    
+    # Log the paths to help with debugging
+    print(f"Base template path: {generator.base_template_path}")
+    print(f"Binary data path: {generator.binary_data_path}")
+    
+    # Check if binary data file exists
+    if os.path.exists(generator.binary_data_path):
+        print(f"Binary data file found at: {generator.binary_data_path}")
+    else:
+        print(f"Warning: Binary data file not found at: {generator.binary_data_path}")
 
 def generate_xml(generator, payload):
     """
@@ -60,6 +70,12 @@ def generate_xml(generator, payload):
         if export_elem is None:
             # Create export element if not found
             export_elem = ET.SubElement(root, "export")
+    
+    # Add DataServices processing instruction
+    if len(tree.xpath('//processing-instruction("DataServices")')) == 0:
+        pi = ET.ProcessingInstruction("DataServices", "DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;")
+        if root.getprevious() is None:
+            root.addprevious(pi)
     
     # Add TOPLEVEL section if missing
     toplevel_elem = export_elem.find("./TOPLEVEL")
@@ -167,7 +183,11 @@ def generate_xml(generator, payload):
         raise ValueError("\n".join(validation_errors))
     
     # Inject binary data from binary_data_library.xml if it exists
-    generator._inject_binary_data(export_elem)
+    if os.path.exists(generator.binary_data_path):
+        print("Injecting binary data from: ", generator.binary_data_path)
+        generator._inject_binary_data(export_elem)
+    else:
+        print("Binary data file not found, skipping binary data injection")
     
     # Get XML as string
     xml_string = xml_to_string(root)
