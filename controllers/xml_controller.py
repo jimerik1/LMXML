@@ -45,7 +45,7 @@ def generate_xml():
         
         # Get a file name based on the well name if available
         well_name = payload.get('projectInfo', {}).get('well', {}).get('wellCommonName', 'output')
-        file_name = f"{well_name.replace(' ', '_')}.xml"
+        file_name = f"{well_name.replace(' ', '_')}.edm.xml"
         
         # Return the file or a download link
         if request.args.get('download', 'false').lower() == 'true':

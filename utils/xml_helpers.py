@@ -237,6 +237,7 @@ def fix_xml_structure(xml_string):
     Returns:
         str: Corrected XML string with each element on its own line
     """
+    
     # Remove duplicate XML declarations
     xml_decl_pattern = re.compile(r'<\?xml[^>]*\?>')
     xml_decls = xml_decl_pattern.findall(xml_string)

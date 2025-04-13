@@ -19,7 +19,11 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
     well_ids = generator.id_registry.id_map.get('WELL', [])
     wellbore_ids = generator.id_registry.id_map.get('WELLBORE', [])
     
-    # Update materials
+    # Create a mapping of material names to IDs for easy reference
+    material_name_to_id = {}
+    material_grade_to_id = {}
+    
+    # Update materials and build the name-to-id and grade-to-id mappings
     if 'materials' in casing_schematics:
         for material in casing_schematics['materials']:
             # Prepare attributes
@@ -27,7 +31,19 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
             
             # Set ID
             if 'materialId' in material:
-                attributes["MATERIAL_ID"] = material['materialId']
+                material_id = material['materialId']
+                attributes["MATERIAL_ID"] = material_id
+            else:
+                material_id = generator.id_registry.generate_id('MATERIAL')
+                material['materialId'] = material_id
+                attributes["MATERIAL_ID"] = material_id
+            
+            # Add to mapping
+            if 'materialName' in material:
+                material_name_to_id[material['materialName']] = material_id
+            
+            if 'grade' in material:
+                material_grade_to_id[material['grade']] = material_id
             
             # Set required attributes for material
             if 'grade' in material:
@@ -52,6 +68,12 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
                     xml_key = convert_camel_to_xml_key(key)
                     attributes[xml_key] = str(value)
             
+            # Set well and wellbore IDs explicitly
+            if well_ids:
+                attributes["WELL_ID"] = well_ids[0]
+            if wellbore_ids:
+                attributes["WELLBORE_ID"] = wellbore_ids[0]
+            
             # Create material element
             mat_elem = ET.SubElement(export_elem, "CD_MATERIAL")
             set_attributes_ordered(mat_elem, attributes)
@@ -69,7 +91,7 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
             if 'assemblyId' in assembly:
                 attributes["ASSEMBLY_ID"] = assembly['assemblyId']
             
-            # Set wellbore ID and well ID
+            # Set wellbore ID and well ID - THESE ARE CRITICAL
             if wellbore_ids:
                 attributes["WELLBORE_ID"] = wellbore_ids[0]
                 # Set well ID if available
@@ -116,7 +138,7 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
                     if 'assemblyId' in assembly:
                         comp_attributes["ASSEMBLY_ID"] = assembly['assemblyId']
                     
-                    # Set wellbore and well IDs
+                    # Set wellbore and well IDs - CRITICAL FOR DATABASE INSERTION
                     if wellbore_ids:
                         comp_attributes["WELLBORE_ID"] = wellbore_ids[0]
                         if well_ids:
@@ -134,13 +156,27 @@ def update_casing_schematics(generator, export_elem, casing_schematics):
                         comp_attributes["SECT_TYPE_CODE"] = "LIN"
                         comp_attributes["COMP_TYPE_CODE"] = "LIN"
                     
-                    # Set material ID if provided
+                    # THIS IS THE KEY PART: Set material ID
+                    # Try to find material by explicit ID first
                     if 'materialId' in component:
                         comp_attributes["MATERIAL_ID"] = component['materialId']
+                    # Then try to find by materialName
+                    elif 'materialName' in component and component['materialName'] in material_name_to_id:
+                        comp_attributes["MATERIAL_ID"] = material_name_to_id[component['materialName']]
+                    # Then try to find by grade
+                    elif 'grade' in component and component['grade'] in material_grade_to_id:
+                        comp_attributes["MATERIAL_ID"] = material_grade_to_id[component['grade']]
+                    # If we still don't have a material ID and we have materials, use the first one
+                    elif material_name_to_id:
+                        first_material_id = next(iter(material_name_to_id.values()))
+                        comp_attributes["MATERIAL_ID"] = first_material_id
+                    # If no materials defined, set to an empty string
+                    else:
+                        comp_attributes["MATERIAL_ID"] = ""
                     
                     # Set other attributes with appropriate naming conversion
                     for key, value in component.items():
-                        if key not in ['componentId', 'assemblyId', 'wellboreId', 'componentType', 'materialId']:
+                        if key not in ['componentId', 'assemblyId', 'wellboreId', 'componentType', 'materialId', 'materialName']:
                             # Handle special naming cases
                             if key == 'outerDiameter':
                                 comp_attributes["OD_BODY"] = str(value)
