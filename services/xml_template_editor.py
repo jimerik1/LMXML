@@ -60,12 +60,27 @@ class XMLTemplateEditor:
     
     def get_xml_string(self):
         """
-        Get the XML as a string.
+        Get the XML as a string with proper formatting.
         
         Returns:
-            str: XML as a string
+            str: XML as a string with proper line breaks
         """
-        return ET.tostring(self.root, encoding='utf-8', xml_declaration=True, pretty_print=True).decode('utf-8')
+        # Get the XML string with pretty printing
+        xml_string = ET.tostring(self.root, encoding='utf-8', xml_declaration=True, pretty_print=True).decode('utf-8')
+        
+        # Use regex to ensure each XML tag is on a new line
+        import re
+        # This pattern will find closing tags followed immediately by opening tags
+        pattern = r'(/>|>)(<)'
+        # Replace with a closing tag, newline, then opening tag
+        xml_string = re.sub(pattern, r'\1\n\2', xml_string)
+        
+        # Ensure DataServices processing instruction is preserved if it exists
+        if '<?DataServices' not in xml_string and hasattr(self, 'dataservices_pi'):
+            xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
+                                        '<?xml version="1.0" encoding="utf-8"?>\n' + self.dataservices_pi)
+        
+        return xml_string
     
     def update_element_attribute(self, tag_name, id_attr, id_value, attr_name, attr_value):
         """
