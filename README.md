@@ -1,6 +1,4 @@
-Below is a properly formatted `README.md` file for your XML Generator API. I've organized the content, removed duplicates, fixed formatting issues, and ensured consistency while preserving all relevant information. You can copy and paste this directly into your `README.md` file.
 
-```markdown
 # XML Generator API
 
 A service for generating EDM-compatible XML documents from JSON data based on templates.
@@ -144,14 +142,3 @@ xml-generator-api/
 ├── utils/                  # Utility functions
 └── output/                 # Generated XML files directory
 ```
-
-```
-
-This version:
-- Consolidates duplicate sections (e.g., repeated "Template Mode" and "Working with Generated Files").
-- Organizes endpoints into a clear table for better readability.
-- Uses consistent headers and formatting (e.g., proper code blocks, bullet points, and spacing).
-- Simplifies the setup instructions by separating Docker and local setup.
-- Maintains all technical details while improving clarity and structure.
-
-You can copy this entire block into your `README.md` file. Let me know if you need further tweaks!
