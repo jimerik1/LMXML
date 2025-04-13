@@ -308,14 +308,18 @@ For example, if the API returns `"file_path": "tmpnpvzo7xh.xml"`, you can find t
 ### Using curl
 
 ```bash
-# Generate XML
+# Generate XML in standard mode
 curl -X POST -H "Content-Type: application/json" -d @example_payload.json http://localhost:5000/api/xml/generate
+
+# Generate XML in template mode
+curl -X POST -H "Content-Type: application/json" -d @template_update_payload.json http://localhost:5000/api/xml/generate?template_mode=true
 
 # Validate payload
 curl -X POST -H "Content-Type: application/json" -d @example_payload.json http://localhost:5000/api/xml/validate
 
 # Download generated file
-curl -O http://localhost:5000/api/xml/download/tmpnpvzo7xh.xml
+curl -O http://localhost:5000/api/xml/download/tmpnpvzo7xh.xmlRetryClaude can make mistakes. Please double-check responses.
+
 ```
 
 ### Using Python requests
