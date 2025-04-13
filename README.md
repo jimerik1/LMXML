@@ -5,6 +5,11 @@ A service for generating EDM-compatible XML documents based on templates.
 ## Overview
 
 This API allows you to generate XML files for use with EDM software by providing structured JSON data describing well information, formation data, and casing schematics. The service handles ID generation, reference management, and proper XML formatting according to EDM requirements.
+The API now supports two modes:
+
+Standard mode: Generates a complete XML file from scratch
+Template mode: Updates specific elements in an existing XML template while preserving IDs
+
 
 ## Project Structure
 
@@ -148,6 +153,48 @@ Validate a JSON payload without generating an XML file.
 }
 ```
 
+### Template Mode
+The API now supports a template mode that allows you to update specific elements in an existing XML file without regenerating all IDs. This mode is useful when you want to make targeted changes to an XML file while preserving the overall structure and IDs.
+
+### Using Template Mode
+
+To use template mode, add the template_mode=true query parameter to the /api/xml/generate endpoint. You can also specify a custom template file using the template_path parameter.
+
+```
+POST /api/xml/generate?template_mode=true
+Content-Type: application/json
+
+{
+  "projectInfo": {
+    "site": {
+      "siteName": "Updated Site Name"
+    },
+    "well": {
+      "wellCommonName": "Updated Well Name"
+    },
+    "wellbore": {
+      "wellboreName": "Updated Wellbore Name"
+    }
+  },
+  "formationInputs": {
+    "temperatureProfiles": [
+      {"depth": 0, "temperature": 60, "units": "F"},
+      {"depth": 5000, "temperature": 155, "units": "F"}
+    ],
+    "dlsOverrideGroup": {
+      "overrides": [
+        {"topDepth": 1000, "baseDepth": 1500, "doglegSeverity": 3.5},
+        {"topDepth": 2000, "baseDepth": 2500, "doglegSeverity": 2.5}
+      ]
+    }
+  },
+  "datum": {
+    "datumName": "Updated Datum",
+    "datumElevation": 32.5
+  }
+} 
+
+
 ### Get Template Information
 
 ```
@@ -254,6 +301,7 @@ Get the JSON schema used for validating input payloads.
 The generated XML files are stored in the `output` directory. When using Docker, this directory is mounted as a volume, so files are accessible on the host machine at `./output/` relative to the project root.
 
 For example, if the API returns `"file_path": "tmpnpvzo7xh.xml"`, you can find the file at `./output/tmpnpvzo7xh.xml`.
+
 
 ## Example Usage
 

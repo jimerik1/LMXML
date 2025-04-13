@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from config import active_config
 from models.schemas import PayloadSchema
 from services.xml_generator import XMLGenerator
+from services.xml_template_editor import XMLTemplateEditor
 from utils.xml_helpers import load_xml_template
 
 # Create a blueprint for XML routes
@@ -26,6 +27,8 @@ def generate_xml():
     
     Request Parameters:
         download (bool): Whether to return the file directly (default: false)
+        template_mode (bool): Whether to use template mode (default: false)
+        template_path (str): Path to the template file (for template_mode)
     
     Returns:
         JSON response with status and file info, or the file directly
@@ -35,8 +38,36 @@ def generate_xml():
         schema = PayloadSchema()
         payload = schema.load(request.json)
         
-        # Generate the XML
-        xml_content = xml_generator.generate_xml(payload)
+        # Check if template mode is requested
+        template_mode = request.args.get('template_mode', 'false').lower() == 'true'
+        
+        if template_mode:
+            # Use the template editor to update an existing XML file
+            template_path = request.args.get('template_path')
+            
+            if not template_path:
+                # Use the default template included in paste-2.txt
+                template_path = os.path.join(active_config.TEMPLATE_DIR, 'edm_template.xml')
+            
+            if not os.path.exists(template_path):
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Template file not found: {template_path}'
+                }), 404
+            
+            # Create template editor and update the XML
+            editor = XMLTemplateEditor(template_path)
+            if not editor.update_from_payload(payload):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to update XML template'
+                }), 500
+            
+            # Get the updated XML
+            xml_content = editor.get_xml_string()
+        else:
+            # Use the standard XML generator
+            xml_content = xml_generator.generate_xml(payload)
         
         # Save to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir=active_config.OUTPUT_DIR) as temp:
@@ -185,3 +216,31 @@ def get_schema():
             'status': 'error',
             'message': str(e)
         }), 500
+
+@xml_bp.route('/template-mode-info', methods=['GET'])
+def get_template_mode_info():
+    """
+    Get information about the template mode feature.
+    
+    Returns:
+        JSON response with template mode information
+    """
+    return jsonify({
+        'status': 'success',
+        'message': 'Template mode allows updating specific elements in an existing XML file without regenerating all IDs',
+        'usage': {
+            'endpoint': '/api/xml/generate?template_mode=true',
+            'optional_params': {
+                'template_path': 'Path to custom template file (optional)'
+            },
+            'description': 'Send the same payload as normal, but only specified fields will be updated while maintaining existing IDs'
+        },
+        'supported_updates': [
+            'Site, well, wellbore, and scenario names',
+            'Temperature profiles',
+            'Pressure profiles',
+            'DLS overrides',
+            'Survey stations',
+            'Datum information'
+        ]
+    })
