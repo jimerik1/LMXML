@@ -34,9 +34,14 @@ def generate_xml():
         JSON response with status and file info, or the file directly
     """
     try:
+        # Log request information
+        print(f"Received request to /generate with params: {request.args}")
+        print(f"Template mode: {request.args.get('template_mode', 'false')}")
+        
         # Validate the request payload
         schema = PayloadSchema()
         payload = schema.load(request.json)
+        print(f"Payload validation successful")
         
         # Check if template mode is requested
         template_mode = request.args.get('template_mode', 'false').lower() == 'true'
@@ -46,30 +51,39 @@ def generate_xml():
             template_path = request.args.get('template_path')
             
             if not template_path:
-                # Use the default template included in paste-2.txt
+                # Use the default template
                 template_path = os.path.join(active_config.TEMPLATE_DIR, 'edm_template.xml')
+                print(f"Using default template path: {template_path}")
             
             if not os.path.exists(template_path):
+                print(f"Template file not found: {template_path}")
                 return jsonify({
                     'status': 'error',
                     'message': f'Template file not found: {template_path}'
                 }), 404
             
+            print(f"Creating template editor with template: {template_path}")
             # Create template editor and update the XML
             editor = XMLTemplateEditor(template_path)
+            
+            print("Updating template from payload")
             if not editor.update_from_payload(payload):
+                print("Failed to update XML template")
                 return jsonify({
                     'status': 'error',
                     'message': 'Failed to update XML template'
                 }), 500
             
             # Get the updated XML
+            print("Getting updated XML string")
             xml_content = editor.get_xml_string()
         else:
             # Use the standard XML generator
+            print("Using standard XML generator")
             xml_content = xml_generator.generate_xml(payload)
         
         # Save to a temporary file
+        print("Saving to temporary file")
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir=active_config.OUTPUT_DIR) as temp:
             temp.write(xml_content.encode('utf-8'))
             temp_path = temp.name
@@ -78,8 +92,11 @@ def generate_xml():
         well_name = payload.get('projectInfo', {}).get('well', {}).get('wellCommonName', 'output')
         file_name = f"{well_name.replace(' ', '_')}.edm.xml"
         
+        print(f"Generated file: {temp_path}, filename: {file_name}")
+        
         # Return the file or a download link
         if request.args.get('download', 'false').lower() == 'true':
+            print("Returning file for download")
             return send_file(
                 temp_path,
                 as_attachment=True,
@@ -87,6 +104,7 @@ def generate_xml():
                 mimetype='application/xml'
             )
         else:
+            print("Returning file info")
             return jsonify({
                 'status': 'success',
                 'message': 'XML file generated successfully',
@@ -95,12 +113,14 @@ def generate_xml():
             })
             
     except ValidationError as e:
+        print(f"Validation error: {e.messages}")
         return jsonify({
             'status': 'error',
             'message': 'Validation error',
             'errors': e.messages
         }), 400
     except Exception as e:
+        print(f"Error generating XML: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)

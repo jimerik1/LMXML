@@ -34,6 +34,7 @@ class XMLTemplateEditor:
             self.template_path = template_path
             self.tree = ET.parse(template_path)
             self.root = self.tree.getroot()
+            print(f"Successfully loaded template from {template_path}")
             return True
         except Exception as e:
             print(f"Error loading XML template: {str(e)}")
@@ -51,6 +52,7 @@ class XMLTemplateEditor:
         """
         try:
             self.tree.write(output_path, encoding='utf-8', xml_declaration=True, pretty_print=True)
+            print(f"Successfully saved XML to {output_path}")
             return True
         except Exception as e:
             print(f"Error saving XML: {str(e)}")
@@ -83,10 +85,12 @@ class XMLTemplateEditor:
         elements = self.root.xpath(xpath)
         
         if not elements:
+            print(f"No elements found for xpath: {xpath}")
             return False
         
         for element in elements:
             element.set(attr_name, str(attr_value))
+            print(f"Updated attribute {attr_name}={attr_value} for element {tag_name}")
             
             # Update the timestamp if it's an update date
             if attr_name not in ['CREATE_DATE', 'UPDATE_DATE']:
@@ -125,30 +129,10 @@ class XMLTemplateEditor:
         elif tag_name == 'CD_CASE':
             name_attr = 'CASE_NAME'
         
-        return self.update_element_attribute(tag_name, id_attr, id_value, name_attr, name_value)
-    
-    def add_child_element(self, parent_tag, parent_id_attr, parent_id_value, child_element):
-        """
-        Add a child element to a parent element identified by its tag and ID.
-        
-        Args:
-            parent_tag (str): Parent element tag name
-            parent_id_attr (str): Parent ID attribute name
-            parent_id_value (str): Parent ID attribute value to match
-            child_element (Element): Child element to add
-            
-        Returns:
-            bool: True if parent was found and child added, False otherwise
-        """
-        xpath = f".//{parent_tag}[@{parent_id_attr}='{parent_id_value}']"
-        parents = self.root.xpath(xpath)
-        
-        if not parents:
-            return False
-        
-        # Add to the parent element
-        parents[0].append(child_element)
-        return True
+        result = self.update_element_attribute(tag_name, id_attr, id_value, name_attr, name_value)
+        if result:
+            print(f"Updated {name_attr} to '{name_value}' for {tag_name} with {id_attr}={id_value}")
+        return result
     
     def create_element(self, tag_name, attributes):
         """
@@ -164,28 +148,8 @@ class XMLTemplateEditor:
         element = ET.Element(tag_name)
         for attr, value in attributes.items():
             element.set(attr, str(value))
+        print(f"Created new element {tag_name} with attributes: {attributes}")
         return element
-    
-    def remove_elements_by_tag(self, tag_name):
-        """
-        Remove all elements with a specific tag.
-        
-        Args:
-            tag_name (str): Element tag name to remove
-            
-        Returns:
-            int: Number of elements removed
-        """
-        elements = self.root.findall(f".//{tag_name}")
-        count = 0
-        
-        for element in elements:
-            parent = element.getparent()
-            if parent is not None:
-                parent.remove(element)
-                count += 1
-        
-        return count
     
     def update_temperature_profiles(self, well_id, wellbore_id, temp_group_id, temp_profiles):
         """
@@ -201,13 +165,18 @@ class XMLTemplateEditor:
             bool: True if successfully updated, False otherwise
         """
         try:
+            print(f"Updating temperature profiles for group {temp_group_id}")
+            print(f"Input profiles: {temp_profiles}")
+            
             # First, remove existing temperature gradient entries
             xpath = f".//CD_TEMP_GRADIENT[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
             elements = self.root.xpath(xpath)
+            print(f"Found {len(elements)} existing temperature gradients to remove")
             for element in elements:
                 parent = element.getparent()
                 if parent is not None:
                     parent.remove(element)
+                    print(f"Removed temperature gradient element with ID: {element.get('TEMP_GRADIENT_ID')}")
             
             # Update surface temperature in the group if provided
             surface_temp = None
@@ -221,6 +190,9 @@ class XMLTemplateEditor:
                 group_elements = self.root.xpath(group_xpath)
                 if group_elements:
                     group_elements[0].set('SURFACE_AMBIENT_TEMP', str(surface_temp))
+                    print(f"Updated surface temperature to {surface_temp} for group {temp_group_id}")
+                else:
+                    print(f"Warning: Temperature gradient group with ID {temp_group_id} not found")
             
             # Add new temperature gradient elements for depths > 0
             for i, profile in enumerate(temp_profiles):
@@ -240,8 +212,29 @@ class XMLTemplateEditor:
                     
                     # Create and add the element
                     element = self.create_element('CD_TEMP_GRADIENT', attributes)
-                    self.root.append(element)
+                    
+                    # Find the correct place to insert the element
+                    # Typically after other temperature gradient elements or after the temperature gradient group
+                    group_xpath = f".//CD_TEMP_GRADIENT_GROUP[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
+                    group_elements = self.root.xpath(group_xpath)
+                    
+                    if group_elements:
+                        # Insert after the group element
+                        parent = group_elements[0].getparent()
+                        if parent is not None:
+                            index = parent.index(group_elements[0])
+                            parent.insert(index + 1, element)
+                            print(f"Added new temperature gradient at depth {profile.get('depth')}: {profile.get('temperature')}°F")
+                        else:
+                            # Fallback - just append to root
+                            self.root.append(element)
+                            print(f"Added new temperature gradient to root (fallback)")
+                    else:
+                        # Fallback - just append to root
+                        self.root.append(element)
+                        print(f"Added new temperature gradient to root (fallback)")
             
+            print("Temperature profiles update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating temperature profiles: {str(e)}")
@@ -262,14 +255,19 @@ class XMLTemplateEditor:
             bool: True if successfully updated, False otherwise
         """
         try:
+            print(f"Updating pressure profiles")
+            print(f"Input profiles: {pressure_profiles}")
+            
             # First, remove existing pressure entries
             for tag in ['CD_PORE_PRESSURE', 'CD_FRAC_GRADIENT']:
                 xpath = f".//{tag}"
                 elements = self.root.xpath(xpath)
+                print(f"Found {len(elements)} existing {tag} elements to remove")
                 for element in elements:
                     parent = element.getparent()
                     if parent is not None:
                         parent.remove(element)
+                        print(f"Removed {tag} element")
             
             # Group pressure profiles by type
             pore_pressures = []
@@ -281,6 +279,13 @@ class XMLTemplateEditor:
                     pore_pressures.append(profile)
                 elif pressure_type == 'Frac':
                     frac_pressures.append(profile)
+            
+            # Find the correct place to insert the elements
+            pore_group_xpath = f".//CD_PORE_PRESSURE_GROUP[@PORE_PRESSURE_GROUP_ID='{pore_group_id}']"
+            pore_group_elements = self.root.xpath(pore_group_xpath)
+            
+            frac_group_xpath = f".//CD_FRAC_GRADIENT_GROUP[@FRAC_GRADIENT_GROUP_ID='{frac_group_id}']"
+            frac_group_elements = self.root.xpath(frac_group_xpath)
             
             # Add pore pressure elements
             for i, profile in enumerate(pore_pressures):
@@ -306,9 +311,24 @@ class XMLTemplateEditor:
                     'PORE_PRESSURE_EMW': str(emw) if emw is not None else '0.0'
                 }
                 
-                # Create and add the element
+                # Create the element
                 element = self.create_element('CD_PORE_PRESSURE', attributes)
-                self.root.append(element)
+                
+                if pore_group_elements:
+                    # Insert after the group element
+                    parent = pore_group_elements[0].getparent()
+                    if parent is not None:
+                        index = parent.index(pore_group_elements[0])
+                        parent.insert(index + 1, element)
+                        print(f"Added new pore pressure at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
+                    else:
+                        # Fallback - just append to root
+                        self.root.append(element)
+                        print(f"Added new pore pressure to root (fallback)")
+                else:
+                    # Fallback - just append to root
+                    self.root.append(element)
+                    print(f"Added new pore pressure to root (fallback) - group not found")
             
             # Add frac gradient elements
             for i, profile in enumerate(frac_pressures):
@@ -333,15 +353,31 @@ class XMLTemplateEditor:
                     'FRAC_GRADIENT_EMW': str(emw) if emw is not None else '0.0'
                 }
                 
-                # Create and add the element
+                # Create the element
                 element = self.create_element('CD_FRAC_GRADIENT', attributes)
-                self.root.append(element)
+                
+                if frac_group_elements:
+                    # Insert after the group element
+                    parent = frac_group_elements[0].getparent()
+                    if parent is not None:
+                        index = parent.index(frac_group_elements[0])
+                        parent.insert(index + 1, element)
+                        print(f"Added new frac gradient at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
+                    else:
+                        # Fallback - just append to root
+                        self.root.append(element)
+                        print(f"Added new frac gradient to root (fallback)")
+                else:
+                    # Fallback - just append to root
+                    self.root.append(element)
+                    print(f"Added new frac gradient to root (fallback) - group not found")
             
+            print("Pressure profiles update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating pressure profiles: {str(e)}")
             return False
-    
+
     def update_dls_overrides(self, well_id, wellbore_id, scenario_id, dls_group_id, dls_overrides):
         """
         Update dogleg severity overrides in the XML.
@@ -357,13 +393,22 @@ class XMLTemplateEditor:
             bool: True if successfully updated, False otherwise
         """
         try:
+            print(f"Updating DLS overrides for group {dls_group_id}")
+            print(f"Input overrides: {dls_overrides}")
+            
             # First, remove existing DLS override entries
             xpath = f".//TU_DLS_OVERRIDE[@DLS_OVERRIDE_GROUP_ID='{dls_group_id}']"
             elements = self.root.xpath(xpath)
+            print(f"Found {len(elements)} existing DLS overrides to remove")
             for element in elements:
                 parent = element.getparent()
                 if parent is not None:
                     parent.remove(element)
+                    print(f"Removed DLS override element with ID: {element.get('DLS_OVERRIDE_ID')}")
+            
+            # Find the correct place to insert the elements
+            group_xpath = f".//TU_DLS_OVERRIDE_GROUP[@DLS_OVERRIDE_GROUP_ID='{dls_group_id}']"
+            group_elements = self.root.xpath(group_xpath)
             
             # Add new DLS override elements
             for i, override in enumerate(dls_overrides):
@@ -391,10 +436,26 @@ class XMLTemplateEditor:
                 attributes['UPDATE_USER_ID'] = 'API_USER'
                 attributes['UPDATE_APP_ID'] = 'XML_API'
                 
-                # Create and add the element
+                # Create the element
                 element = self.create_element('TU_DLS_OVERRIDE', attributes)
-                self.root.append(element)
+                
+                if group_elements:
+                    # Insert after the group element
+                    parent = group_elements[0].getparent()
+                    if parent is not None:
+                        index = parent.index(group_elements[0])
+                        parent.insert(index + 1, element)
+                        print(f"Added new DLS override: {override.get('topDepth')}-{override.get('baseDepth')}, DLS={override.get('doglegSeverity')}")
+                    else:
+                        # Fallback - just append to root
+                        self.root.append(element)
+                        print(f"Added new DLS override to root (fallback)")
+                else:
+                    # Fallback - just append to root
+                    self.root.append(element)
+                    print(f"Added new DLS override to root (fallback) - group not found")
             
+            print("DLS overrides update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating DLS overrides: {str(e)}")
@@ -414,13 +475,25 @@ class XMLTemplateEditor:
             bool: True if successfully updated, False otherwise
         """
         try:
+            print(f"Updating survey stations for header {survey_header_id}")
+            print(f"Input stations: {survey_stations}")
+            
             # First, remove existing survey station entries
             xpath = f".//CD_DEFINITIVE_SURVEY_STATION[@DEF_SURVEY_HEADER_ID='{survey_header_id}']"
             elements = self.root.xpath(xpath)
+            print(f"Found {len(elements)} existing survey stations to remove")
             for element in elements:
                 parent = element.getparent()
                 if parent is not None:
                     parent.remove(element)
+                    print(f"Removed survey station element with ID: {element.get('DEFINITIVE_SURVEY_ID')}")
+            
+            # Update the header name if provided
+            header_xpath = f".//CD_DEFINITIVE_SURVEY_HEADER[@DEF_SURVEY_HEADER_ID='{survey_header_id}']"
+            header_elements = self.root.xpath(header_xpath)
+            if header_elements and survey_stations and 'name' in survey_stations[0].get('name', {}):
+                header_elements[0].set('NAME', survey_stations[0]['name'])
+                print(f"Updated survey header name to: {survey_stations[0]['name']}")
             
             # Add new survey station elements
             for i, station in enumerate(survey_stations):
@@ -437,7 +510,7 @@ class XMLTemplateEditor:
                     'INCLINATION': str(station.get('inclination')),
                     'MD': str(station.get('md')),
                     'SEQUENCE_NO': str(float(i)),
-                    'DATA_ENTRY_MODE': station.get('dataEntryMode', '0')
+                    'DATA_ENTRY_MODE': str(station.get('dataEntryMode', '0'))
                 }
                 
                 # Add optional attributes if provided
@@ -446,10 +519,26 @@ class XMLTemplateEditor:
                 if 'doglegSeverity' in station:
                     attributes['DOGLEG_SEVERITY'] = str(station['doglegSeverity'])
                 
-                # Create and add the element
+                # Create the element
                 element = self.create_element('CD_DEFINITIVE_SURVEY_STATION', attributes)
-                self.root.append(element)
+                
+                if header_elements:
+                    # Insert after the header element
+                    parent = header_elements[0].getparent()
+                    if parent is not None:
+                        index = parent.index(header_elements[0])
+                        parent.insert(index + 1, element)
+                        print(f"Added new survey station at MD {station.get('md')}: AZ={station.get('azimuth')}, INC={station.get('inclination')}")
+                    else:
+                        # Fallback - just append to root
+                        self.root.append(element)
+                        print(f"Added new survey station to root (fallback)")
+                else:
+                    # Fallback - just append to root
+                    self.root.append(element)
+                    print(f"Added new survey station to root (fallback) - header not found")
             
+            print("Survey stations update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating survey stations: {str(e)}")
@@ -466,6 +555,7 @@ class XMLTemplateEditor:
             bool: True if successfully updated, False otherwise
         """
         try:
+            print("Starting template update from payload")
             # Extract key IDs from the template
             well_id = None
             wellbore_id = None
@@ -482,16 +572,19 @@ class XMLTemplateEditor:
             site_elements = self.root.xpath(".//CD_SITE")
             if site_elements:
                 site_id = site_elements[0].get('SITE_ID')
+                print(f"Found site ID: {site_id}")
             
             # Find well element and extract ID
             well_elements = self.root.xpath(".//CD_WELL")
             if well_elements:
                 well_id = well_elements[0].get('WELL_ID')
+                print(f"Found well ID: {well_id}")
             
             # Find wellbore element and extract ID
             wellbore_elements = self.root.xpath(".//CD_WELLBORE")
             if wellbore_elements:
                 wellbore_id = wellbore_elements[0].get('WELLBORE_ID')
+                print(f"Found wellbore ID: {wellbore_id}")
             
             # Find scenario element and extract ID
             scenario_elements = self.root.xpath(".//CD_SCENARIO")
@@ -502,11 +595,18 @@ class XMLTemplateEditor:
                 frac_gradient_group_id = scenario_elements[0].get('FRAC_GRADIENT_GROUP_ID')
                 survey_header_id = scenario_elements[0].get('DEF_SURVEY_HEADER_ID')
                 datum_id = scenario_elements[0].get('DATUM_ID')
+                print(f"Found scenario ID: {scenario_id}")
+                print(f"Found temp group ID: {temp_gradient_group_id}")
+                print(f"Found pore pressure group ID: {pore_pressure_group_id}")
+                print(f"Found frac gradient group ID: {frac_gradient_group_id}")
+                print(f"Found survey header ID: {survey_header_id}")
+                print(f"Found datum ID: {datum_id}")
             
             # Find DLS override group and extract ID
             dls_group_elements = self.root.xpath(".//TU_DLS_OVERRIDE_GROUP")
             if dls_group_elements:
                 dls_override_group_id = dls_group_elements[0].get('DLS_OVERRIDE_GROUP_ID')
+                print(f"Found DLS override group ID: {dls_override_group_id}")
             
             # Update project information
             project_info = payload.get('projectInfo', {})
@@ -582,7 +682,9 @@ class XMLTemplateEditor:
                 if 'datumElevation' in datum:
                     self.update_element_attribute('CD_DATUM', 'DATUM_ID', datum_id, 'DATUM_ELEVATION', datum['datumElevation'])
             
+            print("Template update from payload completed successfully")
             return True
         except Exception as e:
             print(f"Error updating from payload: {str(e)}")
             return False
+                                                  
