@@ -76,11 +76,12 @@ class XMLTemplateEditor:
         xml_string = ET.tostring(self.root, encoding='utf-8', xml_declaration=True, pretty_print=True).decode('utf-8')
         
         # Replace the XML declaration with the standard format including DataServices PI
-        xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
-                                '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+        # The original line looks for double quotes but lxml generates single quotes
+        xml_string = xml_string.replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>', 
+                            '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
         
         return xml_string
-    
+
     def update_element_attribute(self, tag_name, id_attr, id_value, attr_name, attr_value):
         """
         Update a specific attribute in an element identified by its tag and ID.
@@ -320,7 +321,7 @@ class XMLTemplateEditor:
                 # Add frac gradient elements directly after the group element
                 for i, profile in enumerate(frac_pressures):
                     # Generate a new ID for each element
-                    gradient_id = f"FRAC_{i:04d}"
+                    gradient_id = generate_random_id()
                     
                     # Calculate EMW if not provided
                     emw = profile.get('emw')

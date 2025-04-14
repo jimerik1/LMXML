@@ -195,9 +195,14 @@ def generate_xml(generator, payload):
     # Fix formatting and structure issues
     xml_string = fix_xml_structure(xml_string)
     
-     # FINAL STEP: Ensure DataServices is present (add this)
+    # FINAL STEP: Ensure DataServices is present (add this)
     if '<?DataServices' not in xml_string:
-        xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
-            '<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+        # Update to handle both single and double quotes
+        if '<?xml version=\'1.0\' encoding=\'utf-8\'?>' in xml_string:
+            xml_string = xml_string.replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>', 
+                '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+        else:
+            xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
+                '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
 
     return xml_string
