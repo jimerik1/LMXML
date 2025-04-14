@@ -167,7 +167,7 @@ def format_xml_string(xml_str, pretty_print=True):
         
         # Add XML declaration if needed
         if not formatted_xml.startswith('<?xml'):
-            formatted_xml = '<?xml version="1.0" encoding="utf-8"?>\n' + formatted_xml
+            formatted_xml = '<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n' + formatted_xml
             
         return formatted_xml
     
@@ -307,12 +307,12 @@ def fix_xml_structure(xml_string):
         
         # Add XML declaration
         if not result.startswith('<?xml'):
-            result = '<?xml version="1.0" encoding="utf-8"?>\n' + result
+            result = '<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n' + result
         
         # Add DataServices PI if it was present
         if ds_instrs and '<?DataServices' not in result:
-            result = result.replace('<?xml version="1.0" encoding="utf-8"?>\n', 
-                                   '<?xml version="1.0" encoding="utf-8"?>\n' + ds_instrs[0] + '\n\n')
+            result = result.replace('<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n', 
+                                   '<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n' + ds_instrs[0] + '\n\n')
         
         # Ensure elements are on new lines with proper formatting
         result = ensure_elements_on_new_lines(result)

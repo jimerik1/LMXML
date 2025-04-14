@@ -3,6 +3,13 @@ from lxml import etree as ET
 import os
 import re
 from datetime import datetime
+import random
+import string
+
+def generate_random_id(length=5):
+    """Generate a random alphanumeric ID of specified length."""
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
 
 class XMLTemplateEditor:
     """
@@ -68,15 +75,9 @@ class XMLTemplateEditor:
         # Get the XML string with pretty printing
         xml_string = ET.tostring(self.root, encoding='utf-8', xml_declaration=True, pretty_print=True).decode('utf-8')
         
-        # Always replace the XML declaration with the standard format including standalone attribute
+        # Replace the XML declaration with the standard format including DataServices PI
         xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
-                                    '<?xml version="1.0" standalone="no"?><?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
-                
-        # Check if DataServices PI is already present
-        if '<?DataServices' not in xml_string:
-            # Insert after XML declaration
-            xml_string = xml_string.replace('<?xml version="1.0" standalone="no"?>', 
-                                        '<?xml version="1.0" standalone="no"?>\n' + '<?xml version="1.0" standalone="no"?><?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+                                '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
         
         return xml_string
     
@@ -192,39 +193,43 @@ class XMLTemplateEditor:
                 if group_elements:
                     group_elements[0].set('SURFACE_AMBIENT_TEMP', str(surface_temp))
             
-            # Find the parent element where we'll insert new temperature gradients
-            # This should be after the temperature gradient group
+            # Find the temperature gradient group
             group_xpath = f".//CD_TEMP_GRADIENT_GROUP[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
             group_elements = self.root.xpath(group_xpath)
             
-            # Get the parent of the group to insert after it
-            parent_elem = None
-            if group_elements:
-                parent_elem = group_elements[0].getparent()
+            if not group_elements:
+                print(f"Warning: Temperature gradient group with ID {temp_group_id} not found")
+                return False
             
-            # If we couldn't find a parent, use the root
-            if parent_elem is None:
-                parent_elem = self.root
+            # Get the group element and its parent
+            group_elem = group_elements[0]
+            parent_elem = group_elem.getparent()
             
-            # Add new temperature gradient elements for depths > 0
-            for i, profile in enumerate(temp_profiles):
-                if profile.get('depth', 0) > 0:
-                    # Generate a new ID for each gradient element
-                    temp_id = f"TEMP_{i:04d}"
-                    
-                    # Create element
-                    element = ET.Element('CD_TEMP_GRADIENT')
-                    element.set('WELL_ID', well_id)
-                    element.set('WELLBORE_ID', wellbore_id)
-                    element.set('TEMP_GRADIENT_GROUP_ID', temp_group_id)
-                    element.set('TEMP_GRADIENT_ID', temp_id)
-                    element.set('TEMPERATURE', str(profile.get('temperature')))
-                    element.set('TVD', str(profile.get('depth')))
-                    
-                    # Add to parent
-                    parent_elem.append(element)
-                    
-                    print(f"Added new temperature gradient at depth {profile.get('depth')}: {profile.get('temperature')}°F")
+            # Get the index of the group element in its parent's children
+            group_index = parent_elem.index(group_elem)
+            
+            # Filter profiles with depth > 0 and sort by depth in descending order (deepest first)
+            depth_profiles = [p for p in temp_profiles if p.get('depth', 0) > 0]
+            depth_profiles.sort(key=lambda x: x.get('depth', 0), reverse=True)
+            
+            # Add temperature profiles directly after the group element
+            for i, profile in enumerate(depth_profiles):
+                # Generate a new ID for each gradient element
+                temp_id = generate_random_id()
+                
+                # Create element
+                element = ET.Element('CD_TEMP_GRADIENT')
+                element.set('WELL_ID', well_id)
+                element.set('WELLBORE_ID', wellbore_id)
+                element.set('TEMP_GRADIENT_GROUP_ID', temp_group_id)
+                element.set('TEMP_GRADIENT_ID', temp_id)
+                element.set('TEMPERATURE', str(profile.get('temperature')))
+                element.set('TVD', str(profile.get('depth')))
+                
+                # Insert the element right after the group element
+                parent_elem.insert(group_index + 1 + i, element)
+                
+                print(f"Added new temperature gradient at depth {profile.get('depth')}: {profile.get('temperature')}°F")
             
             return True
         except Exception as e:
@@ -258,74 +263,88 @@ class XMLTemplateEditor:
                 elif pressure_type == 'Frac':
                     frac_pressures.append(profile)
             
-            # Find the pore pressure group to insert after
-            pore_parent = self.root
+            # Sort pressure profiles by depth in descending order (deepest first)
+            pore_pressures.sort(key=lambda x: x.get('depth', 0), reverse=True)
+            frac_pressures.sort(key=lambda x: x.get('depth', 0), reverse=True)
+            
+            # Find the pore pressure group
             pore_group_xpath = f".//CD_PORE_PRESSURE_GROUP[@PORE_PRESSURE_GROUP_ID='{pore_group_id}']"
             pore_group_elements = self.root.xpath(pore_group_xpath)
-            if pore_group_elements:
-                pore_parent = pore_group_elements[0].getparent()
             
-            # Find the frac gradient group to insert after
-            frac_parent = self.root
+            # Find the frac gradient group
             frac_group_xpath = f".//CD_FRAC_GRADIENT_GROUP[@FRAC_GRADIENT_GROUP_ID='{frac_group_id}']"
             frac_group_elements = self.root.xpath(frac_group_xpath)
+            
+            # Process pore pressures if the group exists
+            if pore_group_elements:
+                pore_group_elem = pore_group_elements[0]
+                parent_elem = pore_group_elem.getparent()
+                group_index = parent_elem.index(pore_group_elem)
+                
+                # Add pore pressure elements directly after the group element
+                for i, profile in enumerate(pore_pressures):
+                    # Generate a new ID for each element
+                    pressure_id = generate_random_id()
+                    
+                    # Calculate EMW if not provided
+                    emw = profile.get('emw')
+                    if emw is None and profile.get('depth', 0) > 0:
+                        pressure = profile.get('pressure', 0)
+                        depth = profile.get('depth', 0)
+                        emw = pressure / (0.052 * depth)
+                    
+                    # Create element
+                    element = ET.Element('CD_PORE_PRESSURE')
+                    element.set('WELL_ID', well_id)
+                    element.set('WELLBORE_ID', wellbore_id)
+                    element.set('PORE_PRESSURE_GROUP_ID', pore_group_id)
+                    element.set('PORE_PRESSURE_ID', pressure_id)
+                    element.set('PORE_PRESSURE', str(profile.get('pressure')))
+                    element.set('TVD', str(profile.get('depth')))
+                    element.set('IS_PERMEABLE_ZONE', 'Y')
+                    element.set('PORE_PRESSURE_EMW', str(emw) if emw is not None else '0.0')
+                    
+                    # Insert the element right after the group element
+                    parent_elem.insert(group_index + 1 + i, element)
+                    
+                    print(f"Added new pore pressure at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
+            else:
+                print(f"Warning: Pore pressure group with ID {pore_group_id} not found")
+            
+            # Process frac gradients if the group exists
             if frac_group_elements:
-                frac_parent = frac_group_elements[0].getparent()
-            
-            # Add pore pressure elements
-            for i, profile in enumerate(pore_pressures):
-                # Generate a new ID for each element
-                pressure_id = f"PORE_{i:04d}"
+                frac_group_elem = frac_group_elements[0]
+                parent_elem = frac_group_elem.getparent()
+                group_index = parent_elem.index(frac_group_elem)
                 
-                # Calculate EMW if not provided
-                emw = profile.get('emw')
-                if emw is None and profile.get('depth', 0) > 0:
-                    pressure = profile.get('pressure', 0)
-                    depth = profile.get('depth', 0)
-                    emw = pressure / (0.052 * depth)
-                
-                # Create element
-                element = ET.Element('CD_PORE_PRESSURE')
-                element.set('WELL_ID', well_id)
-                element.set('WELLBORE_ID', wellbore_id)
-                element.set('PORE_PRESSURE_GROUP_ID', pore_group_id)
-                element.set('PORE_PRESSURE_ID', pressure_id)
-                element.set('PORE_PRESSURE', str(profile.get('pressure')))
-                element.set('TVD', str(profile.get('depth')))
-                element.set('IS_PERMEABLE_ZONE', 'Y')
-                element.set('PORE_PRESSURE_EMW', str(emw) if emw is not None else '0.0')
-                
-                # Add to parent
-                pore_parent.append(element)
-                
-                print(f"Added new pore pressure at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
-            
-            # Add frac gradient elements (if any)
-            for i, profile in enumerate(frac_pressures):
-                # Generate a new ID for each element
-                gradient_id = f"FRAC_{i:04d}"
-                
-                # Calculate EMW if not provided
-                emw = profile.get('emw')
-                if emw is None and profile.get('depth', 0) > 0:
-                    pressure = profile.get('pressure', 0)
-                    depth = profile.get('depth', 0)
-                    emw = pressure / (0.052 * depth)
-                
-                # Create element
-                element = ET.Element('CD_FRAC_GRADIENT')
-                element.set('WELL_ID', well_id)
-                element.set('WELLBORE_ID', wellbore_id)
-                element.set('FRAC_GRADIENT_GROUP_ID', frac_group_id)
-                element.set('FRAC_GRADIENT_ID', gradient_id)
-                element.set('FRAC_GRADIENT_PRESSURE', str(profile.get('pressure')))
-                element.set('TVD', str(profile.get('depth')))
-                element.set('FRAC_GRADIENT_EMW', str(emw) if emw is not None else '0.0')
-                
-                # Add to parent
-                frac_parent.append(element)
-                
-                print(f"Added new frac gradient at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
+                # Add frac gradient elements directly after the group element
+                for i, profile in enumerate(frac_pressures):
+                    # Generate a new ID for each element
+                    gradient_id = f"FRAC_{i:04d}"
+                    
+                    # Calculate EMW if not provided
+                    emw = profile.get('emw')
+                    if emw is None and profile.get('depth', 0) > 0:
+                        pressure = profile.get('pressure', 0)
+                        depth = profile.get('depth', 0)
+                        emw = pressure / (0.052 * depth)
+                    
+                    # Create element
+                    element = ET.Element('CD_FRAC_GRADIENT')
+                    element.set('WELL_ID', well_id)
+                    element.set('WELLBORE_ID', wellbore_id)
+                    element.set('FRAC_GRADIENT_GROUP_ID', frac_group_id)
+                    element.set('FRAC_GRADIENT_ID', gradient_id)
+                    element.set('FRAC_GRADIENT_PRESSURE', str(profile.get('pressure')))
+                    element.set('TVD', str(profile.get('depth')))
+                    element.set('FRAC_GRADIENT_EMW', str(emw) if emw is not None else '0.0')
+                    
+                    # Insert the element right after the group element
+                    parent_elem.insert(group_index + 1 + i, element)
+                    
+                    print(f"Added new frac gradient at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
+            else:
+                print(f"Warning: Frac gradient group with ID {frac_group_id} not found")
             
             return True
         except Exception as e:
@@ -347,17 +366,29 @@ class XMLTemplateEditor:
                 if parent is not None:
                     parent.remove(element)
             
-            # Find the parent element where we'll insert new DLS overrides
-            parent_elem = self.root
+            # Find the DLS override group element
             group_xpath = f".//TU_DLS_OVERRIDE_GROUP[@DLS_OVERRIDE_GROUP_ID='{dls_group_id}']"
             group_elements = self.root.xpath(group_xpath)
-            if group_elements:
-                parent_elem = group_elements[0].getparent()
             
-            # Add new DLS override elements
-            for i, override in enumerate(dls_overrides):
+            if not group_elements:
+                print(f"Warning: DLS override group with ID {dls_group_id} not found")
+                return False
+            
+            # Get the group element and its parent
+            group_elem = group_elements[0]
+            parent_elem = group_elem.getparent()
+            
+            # Get the index of the group element in its parent's children
+            group_index = parent_elem.index(group_elem)
+            
+            # Sort DLS overrides by top depth in descending order (deepest first)
+            sorted_overrides = sorted(dls_overrides, key=lambda x: float(x.get('topDepth', 0)), reverse=True)
+            
+            # Add new DLS override elements directly after the group element
+            for i, override in enumerate(sorted_overrides):
                 # Generate a new ID for each override
-                override_id = f"DLS_{i:04d}"
+                override_id = generate_random_id()
+
                 
                 # Create the element
                 element = ET.Element('TU_DLS_OVERRIDE')
@@ -379,8 +410,8 @@ class XMLTemplateEditor:
                 element.set('UPDATE_USER_ID', 'API_USER')
                 element.set('UPDATE_APP_ID', 'XML_API')
                 
-                # Add to parent
-                parent_elem.append(element)
+                # Insert the element right after the group element
+                parent_elem.insert(group_index + 1 + i, element)
                 
                 print(f"Added new DLS override: {override.get('topDepth')}-{override.get('baseDepth')}, DLS={override.get('doglegSeverity')}")
             
@@ -392,19 +423,9 @@ class XMLTemplateEditor:
     def update_survey_stations(self, well_id, wellbore_id, survey_header_id, survey_stations):
         """
         Update survey stations in the XML.
-        
-        Args:
-            well_id (str): Well ID
-            wellbore_id (str): Wellbore ID
-            survey_header_id (str): Survey header ID
-            survey_stations (list): List of survey station dictionaries
-            
-        Returns:
-            bool: True if successfully updated, False otherwise
         """
         try:
             print(f"Updating survey stations for header {survey_header_id}")
-            print(f"Input stations: {survey_stations}")
             
             # First, remove existing survey station entries
             xpath = f".//CD_DEFINITIVE_SURVEY_STATION[@DEF_SURVEY_HEADER_ID='{survey_header_id}']"
@@ -416,17 +437,33 @@ class XMLTemplateEditor:
                     parent.remove(element)
                     print(f"Removed survey station element with ID: {element.get('DEFINITIVE_SURVEY_ID')}")
             
-            # Update the header name if provided
+            # Find the survey header element
             header_xpath = f".//CD_DEFINITIVE_SURVEY_HEADER[@DEF_SURVEY_HEADER_ID='{survey_header_id}']"
             header_elements = self.root.xpath(header_xpath)
-            if header_elements and survey_stations and 'name' in survey_stations[0].get('name', {}):
+            
+            if not header_elements:
+                print(f"Warning: Survey header with ID {survey_header_id} not found")
+                return False
+            
+            # Update the header name if provided
+            if survey_stations and 'name' in survey_stations[0]:
                 header_elements[0].set('NAME', survey_stations[0]['name'])
                 print(f"Updated survey header name to: {survey_stations[0]['name']}")
             
-            # Add new survey station elements
-            for i, station in enumerate(survey_stations):
+            # Get the header element and its parent
+            header_elem = header_elements[0]
+            parent_elem = header_elem.getparent()
+            
+            # Get the index of the header element in its parent's children
+            header_index = parent_elem.index(header_elem)
+            
+            # Sort survey stations by MD in descending order (deepest first)
+            sorted_stations = sorted(survey_stations, key=lambda x: float(x.get('md', 0)), reverse=True)
+            
+            # Add new survey station elements directly after the header element
+            for i, station in enumerate(sorted_stations):
                 # Generate a new ID for each station
-                station_id = f"SURV_{i:04d}"
+                station_id = generate_random_id()
                 
                 # Create attributes
                 attributes = {
@@ -448,23 +485,14 @@ class XMLTemplateEditor:
                     attributes['DOGLEG_SEVERITY'] = str(station['doglegSeverity'])
                 
                 # Create the element
-                element = self.create_element('CD_DEFINITIVE_SURVEY_STATION', attributes)
+                element = ET.Element('CD_DEFINITIVE_SURVEY_STATION')
+                for key, value in attributes.items():
+                    element.set(key, value)
                 
-                if header_elements:
-                    # Insert after the header element
-                    parent = header_elements[0].getparent()
-                    if parent is not None:
-                        index = parent.index(header_elements[0])
-                        parent.insert(index + 1, element)
-                        print(f"Added new survey station at MD {station.get('md')}: AZ={station.get('azimuth')}, INC={station.get('inclination')}")
-                    else:
-                        # Fallback - just append to root
-                        self.root.append(element)
-                        print(f"Added new survey station to root (fallback)")
-                else:
-                    # Fallback - just append to root
-                    self.root.append(element)
-                    print(f"Added new survey station to root (fallback) - header not found")
+                # Insert the element right after the header element
+                parent_elem.insert(header_index + 1 + i, element)
+                
+                print(f"Added new survey station at MD {station.get('md')}: AZ={station.get('azimuth')}, INC={station.get('inclination')}")
             
             print("Survey stations update completed successfully")
             return True
