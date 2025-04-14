@@ -16,6 +16,27 @@ xml_bp = Blueprint('xml', __name__)
 # Initialize the XML generator with the base template
 xml_generator = XMLGenerator(active_config.BASE_TEMPLATE_PATH)
 
+def ensure_correct_xml_header(xml_content):
+    """Ensure the XML has the correct header format."""
+    # The exact header we need
+    required_header = '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n'
+    
+    # Strip any existing XML declarations or processing instructions
+    # Remove everything before the first proper XML element
+    match = re.search(r'<export', xml_content)
+    if match:
+        start_pos = match.start()
+        xml_content = xml_content[start_pos:]
+        # Add our specific header
+        return required_header + xml_content
+    
+    # Fallback if we couldn't find the export tag
+    if '<?xml' in xml_content:
+        xml_content = re.sub(r'<\?xml[^>]*\?>.*?<export', '<export', xml_content, flags=re.DOTALL)
+        return required_header + xml_content
+    
+    return required_header + xml_content
+
 @xml_bp.route('/generate', methods=['POST'])
 def generate_xml():
     """
@@ -88,6 +109,7 @@ def generate_xml():
             xml_content = xml_generator.generate_xml(payload)
         
         # Save to a temporary file
+        
         print("Saving to temporary file")
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir=active_config.OUTPUT_DIR) as temp:
             temp.write(xml_content.encode('utf-8'))

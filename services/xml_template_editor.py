@@ -23,14 +23,17 @@ class XMLTemplateEditor:
     def load_template(self, template_path):
         """
         Load an XML template from a file path.
-        
-        Args:
-            template_path (str): Path to the XML template
-            
-        Returns:
-            bool: True if successfully loaded, False otherwise
         """
         try:
+            # Read the file content to extract processing instructions
+            with open(template_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Extract DataServices PI if present
+                import re
+                ds_match = re.search(r'<\?DataServices[^>]*\?>', content)
+                if ds_match:
+                    self.dataservices_pi = ds_match.group(0)
+            
             self.template_path = template_path
             self.tree = ET.parse(template_path)
             self.root = self.tree.getroot()
@@ -61,24 +64,19 @@ class XMLTemplateEditor:
     def get_xml_string(self):
         """
         Get the XML as a string with proper formatting.
-        
-        Returns:
-            str: XML as a string with proper line breaks
         """
         # Get the XML string with pretty printing
         xml_string = ET.tostring(self.root, encoding='utf-8', xml_declaration=True, pretty_print=True).decode('utf-8')
         
-        # Use regex to ensure each XML tag is on a new line
-        import re
-        # This pattern will find closing tags followed immediately by opening tags
-        pattern = r'(/>|>)(<)'
-        # Replace with a closing tag, newline, then opening tag
-        xml_string = re.sub(pattern, r'\1\n\2', xml_string)
-        
-        # Ensure DataServices processing instruction is preserved if it exists
-        if '<?DataServices' not in xml_string and hasattr(self, 'dataservices_pi'):
-            xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
-                                        '<?xml version="1.0" encoding="utf-8"?>\n' + self.dataservices_pi)
+        # Always replace the XML declaration with the standard format including standalone attribute
+        xml_string = xml_string.replace('<?xml version="1.0" encoding="utf-8"?>', 
+                                    '<?xml version="1.0" standalone="no"?><?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+                
+        # Check if DataServices PI is already present
+        if '<?DataServices' not in xml_string:
+            # Insert after XML declaration
+            xml_string = xml_string.replace('<?xml version="1.0" standalone="no"?>', 
+                                        '<?xml version="1.0" standalone="no"?>\n' + '<?xml version="1.0" standalone="no"?><?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
         
         return xml_string
     
@@ -169,29 +167,17 @@ class XMLTemplateEditor:
     def update_temperature_profiles(self, well_id, wellbore_id, temp_group_id, temp_profiles):
         """
         Update temperature profiles in the XML.
-        
-        Args:
-            well_id (str): Well ID
-            wellbore_id (str): Wellbore ID
-            temp_group_id (str): Temperature gradient group ID
-            temp_profiles (list): List of temperature profile dictionaries
-            
-        Returns:
-            bool: True if successfully updated, False otherwise
         """
         try:
             print(f"Updating temperature profiles for group {temp_group_id}")
-            print(f"Input profiles: {temp_profiles}")
             
             # First, remove existing temperature gradient entries
             xpath = f".//CD_TEMP_GRADIENT[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
             elements = self.root.xpath(xpath)
-            print(f"Found {len(elements)} existing temperature gradients to remove")
             for element in elements:
                 parent = element.getparent()
                 if parent is not None:
                     parent.remove(element)
-                    print(f"Removed temperature gradient element with ID: {element.get('TEMP_GRADIENT_ID')}")
             
             # Update surface temperature in the group if provided
             surface_temp = None
@@ -205,9 +191,20 @@ class XMLTemplateEditor:
                 group_elements = self.root.xpath(group_xpath)
                 if group_elements:
                     group_elements[0].set('SURFACE_AMBIENT_TEMP', str(surface_temp))
-                    print(f"Updated surface temperature to {surface_temp} for group {temp_group_id}")
-                else:
-                    print(f"Warning: Temperature gradient group with ID {temp_group_id} not found")
+            
+            # Find the parent element where we'll insert new temperature gradients
+            # This should be after the temperature gradient group
+            group_xpath = f".//CD_TEMP_GRADIENT_GROUP[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
+            group_elements = self.root.xpath(group_xpath)
+            
+            # Get the parent of the group to insert after it
+            parent_elem = None
+            if group_elements:
+                parent_elem = group_elements[0].getparent()
+            
+            # If we couldn't find a parent, use the root
+            if parent_elem is None:
+                parent_elem = self.root
             
             # Add new temperature gradient elements for depths > 0
             for i, profile in enumerate(temp_profiles):
@@ -215,41 +212,20 @@ class XMLTemplateEditor:
                     # Generate a new ID for each gradient element
                     temp_id = f"TEMP_{i:04d}"
                     
-                    # Create attributes
-                    attributes = {
-                        'WELL_ID': well_id,
-                        'WELLBORE_ID': wellbore_id,
-                        'TEMP_GRADIENT_GROUP_ID': temp_group_id,
-                        'TEMP_GRADIENT_ID': temp_id,
-                        'TEMPERATURE': str(profile.get('temperature')),
-                        'TVD': str(profile.get('depth'))
-                    }
+                    # Create element
+                    element = ET.Element('CD_TEMP_GRADIENT')
+                    element.set('WELL_ID', well_id)
+                    element.set('WELLBORE_ID', wellbore_id)
+                    element.set('TEMP_GRADIENT_GROUP_ID', temp_group_id)
+                    element.set('TEMP_GRADIENT_ID', temp_id)
+                    element.set('TEMPERATURE', str(profile.get('temperature')))
+                    element.set('TVD', str(profile.get('depth')))
                     
-                    # Create and add the element
-                    element = self.create_element('CD_TEMP_GRADIENT', attributes)
+                    # Add to parent
+                    parent_elem.append(element)
                     
-                    # Find the correct place to insert the element
-                    # Typically after other temperature gradient elements or after the temperature gradient group
-                    group_xpath = f".//CD_TEMP_GRADIENT_GROUP[@TEMP_GRADIENT_GROUP_ID='{temp_group_id}']"
-                    group_elements = self.root.xpath(group_xpath)
-                    
-                    if group_elements:
-                        # Insert after the group element
-                        parent = group_elements[0].getparent()
-                        if parent is not None:
-                            index = parent.index(group_elements[0])
-                            parent.insert(index + 1, element)
-                            print(f"Added new temperature gradient at depth {profile.get('depth')}: {profile.get('temperature')}°F")
-                        else:
-                            # Fallback - just append to root
-                            self.root.append(element)
-                            print(f"Added new temperature gradient to root (fallback)")
-                    else:
-                        # Fallback - just append to root
-                        self.root.append(element)
-                        print(f"Added new temperature gradient to root (fallback)")
+                    print(f"Added new temperature gradient at depth {profile.get('depth')}: {profile.get('temperature')}°F")
             
-            print("Temperature profiles update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating temperature profiles: {str(e)}")
@@ -258,31 +234,18 @@ class XMLTemplateEditor:
     def update_pressure_profiles(self, well_id, wellbore_id, pore_group_id, frac_group_id, pressure_profiles):
         """
         Update pressure profiles in the XML.
-        
-        Args:
-            well_id (str): Well ID
-            wellbore_id (str): Wellbore ID
-            pore_group_id (str): Pore pressure group ID
-            frac_group_id (str): Frac gradient group ID
-            pressure_profiles (list): List of pressure profile dictionaries
-            
-        Returns:
-            bool: True if successfully updated, False otherwise
         """
         try:
             print(f"Updating pressure profiles")
-            print(f"Input profiles: {pressure_profiles}")
             
             # First, remove existing pressure entries
             for tag in ['CD_PORE_PRESSURE', 'CD_FRAC_GRADIENT']:
                 xpath = f".//{tag}"
                 elements = self.root.xpath(xpath)
-                print(f"Found {len(elements)} existing {tag} elements to remove")
                 for element in elements:
                     parent = element.getparent()
                     if parent is not None:
                         parent.remove(element)
-                        print(f"Removed {tag} element")
             
             # Group pressure profiles by type
             pore_pressures = []
@@ -295,12 +258,19 @@ class XMLTemplateEditor:
                 elif pressure_type == 'Frac':
                     frac_pressures.append(profile)
             
-            # Find the correct place to insert the elements
+            # Find the pore pressure group to insert after
+            pore_parent = self.root
             pore_group_xpath = f".//CD_PORE_PRESSURE_GROUP[@PORE_PRESSURE_GROUP_ID='{pore_group_id}']"
             pore_group_elements = self.root.xpath(pore_group_xpath)
+            if pore_group_elements:
+                pore_parent = pore_group_elements[0].getparent()
             
+            # Find the frac gradient group to insert after
+            frac_parent = self.root
             frac_group_xpath = f".//CD_FRAC_GRADIENT_GROUP[@FRAC_GRADIENT_GROUP_ID='{frac_group_id}']"
             frac_group_elements = self.root.xpath(frac_group_xpath)
+            if frac_group_elements:
+                frac_parent = frac_group_elements[0].getparent()
             
             # Add pore pressure elements
             for i, profile in enumerate(pore_pressures):
@@ -314,38 +284,23 @@ class XMLTemplateEditor:
                     depth = profile.get('depth', 0)
                     emw = pressure / (0.052 * depth)
                 
-                # Create attributes
-                attributes = {
-                    'WELL_ID': well_id,
-                    'WELLBORE_ID': wellbore_id,
-                    'PORE_PRESSURE_GROUP_ID': pore_group_id,
-                    'PORE_PRESSURE_ID': pressure_id,
-                    'PORE_PRESSURE': str(profile.get('pressure')),
-                    'TVD': str(profile.get('depth')),
-                    'IS_PERMEABLE_ZONE': profile.get('isPermeableZone', 'Y'),
-                    'PORE_PRESSURE_EMW': str(emw) if emw is not None else '0.0'
-                }
+                # Create element
+                element = ET.Element('CD_PORE_PRESSURE')
+                element.set('WELL_ID', well_id)
+                element.set('WELLBORE_ID', wellbore_id)
+                element.set('PORE_PRESSURE_GROUP_ID', pore_group_id)
+                element.set('PORE_PRESSURE_ID', pressure_id)
+                element.set('PORE_PRESSURE', str(profile.get('pressure')))
+                element.set('TVD', str(profile.get('depth')))
+                element.set('IS_PERMEABLE_ZONE', 'Y')
+                element.set('PORE_PRESSURE_EMW', str(emw) if emw is not None else '0.0')
                 
-                # Create the element
-                element = self.create_element('CD_PORE_PRESSURE', attributes)
+                # Add to parent
+                pore_parent.append(element)
                 
-                if pore_group_elements:
-                    # Insert after the group element
-                    parent = pore_group_elements[0].getparent()
-                    if parent is not None:
-                        index = parent.index(pore_group_elements[0])
-                        parent.insert(index + 1, element)
-                        print(f"Added new pore pressure at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
-                    else:
-                        # Fallback - just append to root
-                        self.root.append(element)
-                        print(f"Added new pore pressure to root (fallback)")
-                else:
-                    # Fallback - just append to root
-                    self.root.append(element)
-                    print(f"Added new pore pressure to root (fallback) - group not found")
+                print(f"Added new pore pressure at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
             
-            # Add frac gradient elements
+            # Add frac gradient elements (if any)
             for i, profile in enumerate(frac_pressures):
                 # Generate a new ID for each element
                 gradient_id = f"FRAC_{i:04d}"
@@ -357,37 +312,21 @@ class XMLTemplateEditor:
                     depth = profile.get('depth', 0)
                     emw = pressure / (0.052 * depth)
                 
-                # Create attributes
-                attributes = {
-                    'WELL_ID': well_id,
-                    'WELLBORE_ID': wellbore_id,
-                    'FRAC_GRADIENT_GROUP_ID': frac_group_id,
-                    'FRAC_GRADIENT_ID': gradient_id,
-                    'FRAC_GRADIENT_PRESSURE': str(profile.get('pressure')),
-                    'TVD': str(profile.get('depth')),
-                    'FRAC_GRADIENT_EMW': str(emw) if emw is not None else '0.0'
-                }
+                # Create element
+                element = ET.Element('CD_FRAC_GRADIENT')
+                element.set('WELL_ID', well_id)
+                element.set('WELLBORE_ID', wellbore_id)
+                element.set('FRAC_GRADIENT_GROUP_ID', frac_group_id)
+                element.set('FRAC_GRADIENT_ID', gradient_id)
+                element.set('FRAC_GRADIENT_PRESSURE', str(profile.get('pressure')))
+                element.set('TVD', str(profile.get('depth')))
+                element.set('FRAC_GRADIENT_EMW', str(emw) if emw is not None else '0.0')
                 
-                # Create the element
-                element = self.create_element('CD_FRAC_GRADIENT', attributes)
+                # Add to parent
+                frac_parent.append(element)
                 
-                if frac_group_elements:
-                    # Insert after the group element
-                    parent = frac_group_elements[0].getparent()
-                    if parent is not None:
-                        index = parent.index(frac_group_elements[0])
-                        parent.insert(index + 1, element)
-                        print(f"Added new frac gradient at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
-                    else:
-                        # Fallback - just append to root
-                        self.root.append(element)
-                        print(f"Added new frac gradient to root (fallback)")
-                else:
-                    # Fallback - just append to root
-                    self.root.append(element)
-                    print(f"Added new frac gradient to root (fallback) - group not found")
+                print(f"Added new frac gradient at depth {profile.get('depth')}: {profile.get('pressure')} {profile.get('units')}")
             
-            print("Pressure profiles update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating pressure profiles: {str(e)}")
@@ -396,81 +335,55 @@ class XMLTemplateEditor:
     def update_dls_overrides(self, well_id, wellbore_id, scenario_id, dls_group_id, dls_overrides):
         """
         Update dogleg severity overrides in the XML.
-        
-        Args:
-            well_id (str): Well ID
-            wellbore_id (str): Wellbore ID
-            scenario_id (str): Scenario ID
-            dls_group_id (str): DLS override group ID
-            dls_overrides (list): List of DLS override dictionaries
-            
-        Returns:
-            bool: True if successfully updated, False otherwise
         """
         try:
             print(f"Updating DLS overrides for group {dls_group_id}")
-            print(f"Input overrides: {dls_overrides}")
             
             # First, remove existing DLS override entries
             xpath = f".//TU_DLS_OVERRIDE[@DLS_OVERRIDE_GROUP_ID='{dls_group_id}']"
             elements = self.root.xpath(xpath)
-            print(f"Found {len(elements)} existing DLS overrides to remove")
             for element in elements:
                 parent = element.getparent()
                 if parent is not None:
                     parent.remove(element)
-                    print(f"Removed DLS override element with ID: {element.get('DLS_OVERRIDE_ID')}")
             
-            # Find the correct place to insert the elements
+            # Find the parent element where we'll insert new DLS overrides
+            parent_elem = self.root
             group_xpath = f".//TU_DLS_OVERRIDE_GROUP[@DLS_OVERRIDE_GROUP_ID='{dls_group_id}']"
             group_elements = self.root.xpath(group_xpath)
+            if group_elements:
+                parent_elem = group_elements[0].getparent()
             
             # Add new DLS override elements
             for i, override in enumerate(dls_overrides):
                 # Generate a new ID for each override
                 override_id = f"DLS_{i:04d}"
                 
-                # Create attributes
-                attributes = {
-                    'WELL_ID': well_id,
-                    'WELLBORE_ID': wellbore_id,
-                    'SCENARIO_ID': scenario_id,
-                    'DLS_OVERRIDE_GROUP_ID': dls_group_id,
-                    'DLS_OVERRIDE_ID': override_id,
-                    'MD_TOP': str(override.get('topDepth')),
-                    'MD_BASE': str(override.get('baseDepth')),
-                    'DOGLEG_SEVERITY': str(override.get('doglegSeverity'))
-                }
+                # Create the element
+                element = ET.Element('TU_DLS_OVERRIDE')
+                element.set('WELL_ID', well_id)
+                element.set('WELLBORE_ID', wellbore_id)
+                element.set('SCENARIO_ID', scenario_id)
+                element.set('DLS_OVERRIDE_GROUP_ID', dls_group_id)
+                element.set('DLS_OVERRIDE_ID', override_id)
+                element.set('MD_TOP', str(override.get('topDepth')))
+                element.set('MD_BASE', str(override.get('baseDepth')))
+                element.set('DOGLEG_SEVERITY', str(override.get('doglegSeverity')))
                 
                 # Add creation and update info
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                attributes['CREATE_DATE'] = f"{{ts '{now}'}}"
-                attributes['CREATE_USER_ID'] = 'API_USER'
-                attributes['CREATE_APP_ID'] = 'XML_API'
-                attributes['UPDATE_DATE'] = f"{{ts '{now}'}}"
-                attributes['UPDATE_USER_ID'] = 'API_USER'
-                attributes['UPDATE_APP_ID'] = 'XML_API'
+                element.set('CREATE_DATE', f"{{ts '{now}'}}")
+                element.set('CREATE_USER_ID', 'API_USER')
+                element.set('CREATE_APP_ID', 'XML_API')
+                element.set('UPDATE_DATE', f"{{ts '{now}'}}")
+                element.set('UPDATE_USER_ID', 'API_USER')
+                element.set('UPDATE_APP_ID', 'XML_API')
                 
-                # Create the element
-                element = self.create_element('TU_DLS_OVERRIDE', attributes)
+                # Add to parent
+                parent_elem.append(element)
                 
-                if group_elements:
-                    # Insert after the group element
-                    parent = group_elements[0].getparent()
-                    if parent is not None:
-                        index = parent.index(group_elements[0])
-                        parent.insert(index + 1, element)
-                        print(f"Added new DLS override: {override.get('topDepth')}-{override.get('baseDepth')}, DLS={override.get('doglegSeverity')}")
-                    else:
-                        # Fallback - just append to root
-                        self.root.append(element)
-                        print(f"Added new DLS override to root (fallback)")
-                else:
-                    # Fallback - just append to root
-                    self.root.append(element)
-                    print(f"Added new DLS override to root (fallback) - group not found")
+                print(f"Added new DLS override: {override.get('topDepth')}-{override.get('baseDepth')}, DLS={override.get('doglegSeverity')}")
             
-            print("DLS overrides update completed successfully")
             return True
         except Exception as e:
             print(f"Error updating DLS overrides: {str(e)}")
@@ -558,6 +471,174 @@ class XMLTemplateEditor:
         except Exception as e:
             print(f"Error updating survey stations: {str(e)}")
             return False
+    
+    def inject_binary_data(self):
+        """
+        Inject binary data from binary_data_library.xml into the XML.
+        """
+        try:
+            # Get the template directory path
+            template_dir = os.path.dirname(self.template_path)
+            
+            # Set the binary data library path
+            binary_data_path = os.path.join(template_dir, 'binary_data_library.xml')
+            
+            print(f"Looking for binary data at {binary_data_path}")
+            
+            if not os.path.exists(binary_data_path):
+                print(f"Warning: Binary data library not found at {binary_data_path}")
+                return
+            
+            # Load binary data library
+            binary_tree = ET.parse(binary_data_path)
+            binary_root = binary_tree.getroot()
+            
+            # Find the BINARY_DATA element
+            binary_data_elem = binary_root if binary_root.tag == 'BINARY_DATA' else binary_root.find(".//BINARY_DATA")
+            
+            if binary_data_elem is not None:
+                print("Found BINARY_DATA element in binary data library")
+                
+                # Check if there's already a BINARY_DATA element in our XML
+                existing_binary = self.root.find(".//BINARY_DATA")
+                if existing_binary is not None:
+                    print("Removing existing BINARY_DATA element")
+                    parent = existing_binary.getparent()
+                    if parent is not None:
+                        parent.remove(existing_binary)
+                
+                # Create a new BINARY_DATA element in the export element
+                binary_elem = ET.Element("BINARY_DATA")
+                
+                # Copy attributes
+                for key, value in binary_data_elem.attrib.items():
+                    binary_elem.set(key, value)
+                
+                # Get existing IDs from our XML
+                well_ids = []
+                wellbore_ids = []
+                scenario_ids = []
+                site_ids = []
+                project_ids = ['dzwLFOVy7l']  # Hard-coded from your template
+                policy_ids = ['Pzrgw9f4JC']   # Hard-coded from your template
+                
+                # Extract existing IDs
+                for well_elem in self.root.xpath(".//CD_WELL"):
+                    well_ids.append(well_elem.get('WELL_ID'))
+                
+                for wellbore_elem in self.root.xpath(".//CD_WELLBORE"):
+                    wellbore_ids.append(wellbore_elem.get('WELLBORE_ID'))
+                
+                for scenario_elem in self.root.xpath(".//CD_SCENARIO"):
+                    scenario_ids.append(scenario_elem.get('SCENARIO_ID'))
+                
+                for site_elem in self.root.xpath(".//CD_SITE"):
+                    site_ids.append(site_elem.get('SITE_ID'))
+                
+                print(f"Found IDs in XML: well_ids={well_ids}, wellbore_ids={wellbore_ids}, scenario_ids={scenario_ids}, site_ids={site_ids}")
+                
+                # Process each attachment journal
+                for journal_elem in binary_data_elem.findall("./CD_ATTACHMENT_JOURNAL"):
+                    print("Processing CD_ATTACHMENT_JOURNAL element")
+                    
+                    # Create a new journal element
+                    new_journal = ET.Element("CD_ATTACHMENT_JOURNAL")
+                    
+                    # Generate new IDs for the attachments
+                    import random
+                    import string
+                    chars = string.ascii_letters + string.digits
+                    attachment_id = ''.join(random.choice(chars) for _ in range(8))
+                    attachment_journal_id = ''.join(random.choice(chars) for _ in range(8))
+                    
+                    # Copy and update attributes
+                    for key, value in journal_elem.attrib.items():
+                        if key == "ATTACHMENT_ID":
+                            new_journal.set(key, attachment_id)
+                        elif key == "ATTACHMENT_JOURNAL_ID":
+                            new_journal.set(key, attachment_journal_id)
+                        elif key == "ATTACHMENT_LOCATOR":
+                            # Handle the composite locator string
+                            locator = value
+                            
+                            # Create a new locator with our IDs
+                            parts = {}
+                            for part in locator.split('+'):
+                                if '=' in part:
+                                    name, id_value = part.split('=', 1)
+                                    # Strip parentheses
+                                    if id_value.startswith('(') and id_value.endswith(')'):
+                                        id_value = id_value[1:-1]
+                                    parts[name] = id_value
+                            
+                            # Update with our IDs but keep policy_id constant
+                            if policy_ids:
+                                parts['POLICY_ID'] = policy_ids[0]
+                            if project_ids:
+                                parts['PROJECT_ID'] = project_ids[0]
+                            if site_ids:
+                                parts['SITE_ID'] = site_ids[0]
+                            if well_ids:
+                                parts['WELL_ID'] = well_ids[0]
+                            if wellbore_ids:
+                                parts['WELLBORE_ID'] = wellbore_ids[0]
+                            if scenario_ids:
+                                parts['SCENARIO_ID'] = scenario_ids[0]
+                            
+                            # Reconstruct the locator string
+                            new_locator = '+'.join([f"{name}=({value})" for name, value in parts.items()])
+                            
+                            new_journal.set(key, new_locator)
+                        else:
+                            new_journal.set(key, value)
+                    
+                    # Process the child CD_ATTACHMENT element
+                    for attachment_elem in journal_elem.findall("./CD_ATTACHMENT"):
+                        new_attachment = ET.Element("CD_ATTACHMENT")
+                        
+                        # Copy and update attributes
+                        for key, value in attachment_elem.attrib.items():
+                            if key == "ATTACHMENT_ID":
+                                new_attachment.set(key, attachment_id)
+                            else:
+                                new_attachment.set(key, value)
+                        
+                        # Copy the binary data content
+                        if attachment_elem.text:
+                            new_attachment.text = attachment_elem.text
+                        
+                        # Copy any children of the attachment (if any)
+                        for child in attachment_elem:
+                            new_child = ET.fromstring(ET.tostring(child))
+                            new_attachment.append(new_child)
+                        
+                        new_journal.append(new_attachment)
+                    
+                    # Copy other content and trailing text (the binary data)
+                    if journal_elem.text and journal_elem.text.strip():
+                        new_journal.text = journal_elem.text
+                    
+                    # Copy the text after the attachment element (often binary data)
+                    if len(journal_elem) > 0 and journal_elem[-1].tail and journal_elem[-1].tail.strip():
+                        for i, child in enumerate(new_journal):
+                            if i == len(new_journal) - 1:  # Last child
+                                child.tail = journal_elem[-1].tail
+                    
+                    # Add the journal to the binary element
+                    binary_elem.append(new_journal)
+                
+                # Add the binary element to the root
+                self.root.append(binary_elem)
+                print("Binary data injected successfully")
+                
+                return True
+            else:
+                print("Warning: No BINARY_DATA element found in binary data library")
+                return False
+        except Exception as e:
+            print(f"Error injecting binary data: {str(e)}")
+            return False
+
     
     def update_from_payload(self, payload, add_binary_data=False):
         """
@@ -698,7 +779,6 @@ class XMLTemplateEditor:
                     self.update_element_attribute('CD_DATUM', 'DATUM_ID', datum_id, 'DATUM_ELEVATION', datum['datumElevation'])
             
             print("Template update from payload completed successfully")
-            return True
         
             # Add binary data from template:
             if add_binary_data:
