@@ -111,13 +111,13 @@ def generate_xml():
         # Save to a temporary file
         
         print("Saving to temporary file")
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir=active_config.OUTPUT_DIR) as temp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.edm.xml', dir=active_config.OUTPUT_DIR) as temp:
             temp.write(xml_content.encode('utf-8'))
             temp_path = temp.name
         
         # Get a file name based on the well name if available
         well_name = payload.get('projectInfo', {}).get('well', {}).get('wellCommonName', 'output')
-        file_name = f"{well_name.replace(' ', '_')}.xml"
+        file_name = f"{well_name.replace(' ', '_')}.edm.xml"
         
         print(f"Generated file: {temp_path}, filename: {file_name}")
         

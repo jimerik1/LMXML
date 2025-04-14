@@ -118,7 +118,7 @@ def create_or_update_element(parent, tag_name, attributes):
 
 def xml_to_string(root, pretty_print=True):
     """
-    Convert XML element to string with pretty printing.
+    Convert XML element to string with pretty printing and ensure line breaks between elements.
     
     Args:
         root (Element): Root XML element
@@ -130,15 +130,26 @@ def xml_to_string(root, pretty_print=True):
     # For ElementTree elements
     if isinstance(root, ET.Element):
         xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8')
-        return format_xml_string(xml_str, pretty_print)
+    else:
+        # For lxml elements
+        xml_str = etree.tostring(
+            root, 
+            encoding='utf-8', 
+            xml_declaration=True,
+            pretty_print=pretty_print
+        ).decode('utf-8')
     
-    # For lxml elements
-    return etree.tostring(
-        root, 
-        encoding='utf-8', 
-        xml_declaration=True,
-        pretty_print=pretty_print
-    ).decode('utf-8')
+    # Apply line breaks between elements (even if pretty_print didn't work)
+    xml_str = re.sub(r'><', '>\n<', xml_str)
+    
+    # Fix XML declaration if needed
+    if '<?DataServices' not in xml_str:
+        xml_str = xml_str.replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>', 
+            '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+        xml_str = xml_str.replace('<?xml version="1.0" encoding="utf-8"?>', 
+            '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+    
+    return xml_str
 
 def format_xml_string(xml_str, pretty_print=True):
     """
@@ -167,29 +178,27 @@ def format_xml_string(xml_str, pretty_print=True):
         
         # Add XML declaration if needed
         if not formatted_xml.startswith('<?xml'):
-            formatted_xml = '<?xml version="1.0" encoding="utf-8"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n' + formatted_xml
+            formatted_xml = '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>\n' + formatted_xml
             
         return formatted_xml
     
     except Exception as e:
-        # Fall back to minidom if lxml fails
-        print(f"Warning: lxml formatting failed, falling back to minidom: {str(e)}")
-        import xml.dom.minidom
+        # Fall back to a manual approach if lxml fails
+        print(f"Warning: lxml formatting failed, falling back to manual formatting: {str(e)}")
         
-        # Parse the XML string
-        try:
-            dom = xml.dom.minidom.parseString(xml_str)
-            
-            # Get pretty XML string with the xml declaration
-            formatted_xml = dom.toprettyxml(indent='  ')
-            
-            # Remove empty lines
-            lines = [line for line in formatted_xml.split('\n') if line.strip()]
-            return '\n'.join(lines)
-        except Exception as e2:
-            print(f"Warning: XML formatting failed completely: {str(e2)}")
-            # Return original if all else fails
-            return xml_str
+        # Add line breaks after each closing tag, except for self-closing tags
+        xml_str = re.sub(r'(</[^>]+>)(?![\s\n])', r'\1\n', xml_str)
+        
+        # Add line breaks after opening tags that aren't followed by closing tags or other opening tags
+        xml_str = re.sub(r'(<[^/][^>]*[^/]>)(?![\s\n<])', r'\1\n', xml_str)
+        
+        # Add line breaks after self-closing tags
+        xml_str = re.sub(r'(<[^>]+/>)(?![\s\n])', r'\1\n', xml_str)
+        
+        # Clean up extra line breaks to avoid too many blank lines
+        xml_str = re.sub(r'\n\s*\n', '\n', xml_str)
+        
+        return xml_str
 
 def format_timestamp(date_str):
     """
@@ -269,8 +278,15 @@ def fix_xml_structure(xml_string):
     
     # Helper function to ensure elements are on new lines with proper indentation
     def ensure_elements_on_new_lines(xml_str):
+        """Helper function to ensure elements are on new lines with proper indentation."""
         # Add a newline after each closing tag if not already present
-        xml_str = re.sub(r'>([ \t]*)<', '>\n<', xml_str)
+        xml_str = re.sub(r'(</[^>]+>)(?![\s\n])', r'\1\n', xml_str)
+        
+        # Add a newline after each opening tag that isn't immediately followed by text or another tag
+        xml_str = re.sub(r'(<[^/][^>]*[^/]>)(?![\s\n<])', r'\1\n', xml_str)
+        
+        # Add a newline after self-closing tags
+        xml_str = re.sub(r'(<[^>]+/>)(?![\s\n])', r'\1\n', xml_str)
         
         # Replace multiple newlines with a single newline
         xml_str = re.sub(r'\n+', '\n', xml_str)
