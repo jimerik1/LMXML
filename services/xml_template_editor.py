@@ -559,7 +559,7 @@ class XMLTemplateEditor:
             print(f"Error updating survey stations: {str(e)}")
             return False
     
-    def update_from_payload(self, payload):
+    def update_from_payload(self, payload, add_binary_data=False):
         """
         Update the XML template using data from a payload.
         
@@ -699,6 +699,15 @@ class XMLTemplateEditor:
             
             print("Template update from payload completed successfully")
             return True
+        
+            # Add binary data from template:
+            if add_binary_data:
+                print("Adding binary data to the XML")
+                self.inject_binary_data()
+                    
+            print("Template update from payload completed successfully")
+            return True
+
         except Exception as e:
             print(f"Error updating from payload: {str(e)}")
             return False

@@ -29,6 +29,7 @@ def generate_xml():
         download (bool): Whether to return the file directly (default: false)
         template_mode (bool): Whether to use template mode (default: false)
         template_path (str): Path to the template file (for template_mode)
+        add_binary_data (bool): Whether to add binary data (default: false)
     
     Returns:
         JSON response with status and file info, or the file directly
@@ -36,7 +37,6 @@ def generate_xml():
     try:
         # Log request information
         print(f"Received request to /generate with params: {request.args}")
-        print(f"Template mode: {request.args.get('template_mode', 'false')}")
         
         # Validate the request payload
         schema = PayloadSchema()
@@ -45,6 +45,11 @@ def generate_xml():
         
         # Check if template mode is requested
         template_mode = request.args.get('template_mode', 'false').lower() == 'true'
+        print(f"Template mode: {template_mode}")
+        
+        # Check if binary data should be added
+        add_binary_data = request.args.get('add_binary_data', 'false').lower() == 'true'
+        print(f"Add binary data: {add_binary_data}")
         
         if template_mode:
             # Use the template editor to update an existing XML file
@@ -67,7 +72,7 @@ def generate_xml():
             editor = XMLTemplateEditor(template_path)
             
             print("Updating template from payload")
-            if not editor.update_from_payload(payload):
+            if not editor.update_from_payload(payload, add_binary_data):
                 print("Failed to update XML template")
                 return jsonify({
                     'status': 'error',
@@ -90,7 +95,7 @@ def generate_xml():
         
         # Get a file name based on the well name if available
         well_name = payload.get('projectInfo', {}).get('well', {}).get('wellCommonName', 'output')
-        file_name = f"{well_name.replace(' ', '_')}.edm.xml"
+        file_name = f"{well_name.replace(' ', '_')}.xml"
         
         print(f"Generated file: {temp_path}, filename: {file_name}")
         
@@ -125,7 +130,7 @@ def generate_xml():
             'status': 'error',
             'message': str(e)
         }), 500
-
+        
 @xml_bp.route('/download/<filename>', methods=['GET'])
 def download_xml(filename):
     """
