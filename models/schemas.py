@@ -1,5 +1,6 @@
 # models/schemas.py
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, validates_schema, ValidationError
+from typing import Dict, Any
 
 class SiteSchema(Schema):
     """Validation schema for site information."""
@@ -39,6 +40,12 @@ class PressureProfileSchema(Schema):
     pressure = fields.Float(required=True)
     pressureType = fields.String(validate=validate.OneOf(['Pore', 'Frac', 'Hydrostatic']))
     units = fields.String(validate=validate.OneOf(['psi', 'bar', 'kPa']))
+    
+    @validates_schema
+    def validate_pressure_type(self, data: Dict[str, Any], **kwargs) -> None:
+        """Validate that pressureType is provided."""
+        if 'pressureType' not in data:
+            raise ValidationError("pressureType is required")
 
 class MaterialPropertySchema(Schema):
     """Validation schema for material properties."""

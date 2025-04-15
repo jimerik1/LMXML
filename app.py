@@ -1,9 +1,17 @@
 # Main application entry point
 import os
+import logging
 from flask import Flask
 
 from config import active_config
 from controllers.xml_controller import xml_bp
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def create_app(config=None):
     """Create and configure the Flask application."""
@@ -23,8 +31,10 @@ def create_app(config=None):
         """Simple health check endpoint."""
         return {'status': 'healthy'}
     
+    logger.info(f"Application created with configuration: {app.config['ENV']}")
     return app
 
 if __name__ == '__main__':
     app = create_app()
+    logger.info(f"Starting application on 0.0.0.0:5000")
     app.run(host='0.0.0.0', port=5000)
