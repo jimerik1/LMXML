@@ -1,0 +1,7 @@
+<BINARY_DATA data_encoding="base64">
+    <CD_ATTACHMENT_JOURNAL  attachment_id="la0vD" attachment_journal_id="0lOjk" attachment_locator="policy_id=(Pzrgw9f4JC)+project_id=(dzwLFOVy7l)+site_id=(e0ROyG8AHO)+well_id=(JMSnlV5Ap2)+wellbore_id=(9G0rTBKYYZ)+scenario_id=(EeVU0)" attachment_name="614E.compressed_wcd" attachment_point="CD_SCENARIO" attachment_type="0" create_app_id="WELLCAT" create_date="{ts '2025-04-02 16:36:56'}" create_user_id="Oliasoft.Welldesign(OWD)" description="WELLCAT Attachment" is_visible="N" mime_type="dws-app-data/wellcat-compressed-wcd" update_app_id="WELLCAT" update_date="{ts '2025-04-02 16:36:56'}" update_user_id="Oliasoft.Welldesign(OWD)">
+        <CD_ATTACHMENT attachment_id="la0vD" create_app_id="WELLCAT" create_date="{ts '2025-04-02 16:36:56'}" create_user_id="Oliasoft.Welldesign(OWD)" update_app_id="WELLCAT" update_date="{ts '2025-04-02 16:36:56'}" update_user_id="Oliasoft.Welldesign(OWD)">
+            
+        </CD_ATTACHMENT>
+    </CD_ATTACHMENT_JOURNAL>
+</BINARY_DATA>

@@ -62,31 +62,62 @@ class MaterialPropertySchema(Schema):
 class CasingComponentSchema(Schema):
     """Validation schema for casing components."""
     componentId = fields.String()
-    assemblyId = fields.String()
-    componentType = fields.String(required=True)
+    componentType = fields.String(required=True)  # CAS, TBG, PKR, etc.
     materialId = fields.String()
-    outerDiameter = fields.Float(required=True)
-    innerDiameter = fields.Float(required=True)
-    length = fields.Float(required=True)
-    topDepth = fields.Float(required=True)
+    outerDiameter = fields.Float()  # Not required for all component types
+    innerDiameter = fields.Float()  # Not required for all component types
+    length = fields.Float()         # Not required for all component types
+    topDepth = fields.Float(required=True)  
     bottomDepth = fields.Float(required=True)
     connectionType = fields.String()
-    weight = fields.Float()
+    connectionName = fields.String()  # Added this field
+    connectionGrade = fields.String()
+    weight = fields.Float()  # APPROXIMATE_WEIGHT
+    grade = fields.String()
     pressureBurst = fields.Float()
     pressureCollapse = fields.Float()
-    axialStrength = fields.Float()
+    axialStrength = fields.Float()  # AXIAL_RATING
+    
+    # Additional packer-specific fields
+    packerName = fields.String()
+    packerDepth = fields.Float()
+    plugDepth = fields.Float()
+    
+    # Additional fields
+    jointStrength = fields.Float()
+    pipeType = fields.String()
+    poissonsRatio = fields.Float()
+    minYieldStress = fields.Float()
+    ultimateTensileStrength = fields.Float()
+    thermalExpansionCoef = fields.Float()
+    youngsModulus = fields.Float()
+    wallThicknessPercent = fields.Float()
+    
+    @validates_schema
+    def validate_component_type(self, data: Dict[str, Any], **kwargs) -> None:
+        """
+        Validate that required fields are present based on component type.
+        """
+        if data.get('componentType') in ['CAS', 'TBG']:
+            required_fields = ['outerDiameter', 'innerDiameter', 'length']
+            for field in required_fields:
+                if field not in data or data[field] is None:
+                    raise ValidationError(f"{field} is required for component type {data.get('componentType')}")
 
 class CasingAssemblySchema(Schema):
     """Validation schema for casing assemblies."""
     assemblyId = fields.String()
     wellboreId = fields.String()
     assemblyName = fields.String(required=True)
-    stringType = fields.String(required=True)
-    stringClass = fields.String()
-    assemblySize = fields.Float()
-    holeSize = fields.Float()
-    topDepth = fields.Float(required=True)
-    baseDepth = fields.Float(required=True)
+    stringType = fields.String(required=True)  # Liner, Casing, Tubing, etc.
+    stringClass = fields.String()  # Production, Surface, etc.
+    assemblySize = fields.Float(required=True)
+    holeSize = fields.Float(required=True)
+    topDepth = fields.Float(required=True)  # MD_ASSEMBLY_TOP
+    baseDepth = fields.Float(required=True)  # MD_ASSEMBLY_BASE
+    tocDepth = fields.Float()  # MD_TOC (Top of Cement)
+    mudDensityShoe = fields.Float()
+    isTopDown = fields.String(validate=validate.OneOf(['Y', 'N']), default='Y')
     components = fields.List(fields.Nested(CasingComponentSchema))
 
 class DLSOverrideSchema(Schema):

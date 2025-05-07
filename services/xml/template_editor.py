@@ -15,6 +15,7 @@ from services.xml.profile_handlers import (
 from services.xml.dls_handlers import update_dls_overrides
 from services.xml.survey_handlers import update_survey_stations
 from services.xml.binary_data import inject_binary_data
+from services.xml.casing_handlers import update_casing_assemblies
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,21 @@ class XMLTemplateEditor:
         return update_survey_stations(self.root, well_id, wellbore_id, 
                                      survey_header_id, survey_stations)
     
+    def update_casing_assemblies(self, well_id: str, wellbore_id: str,
+                               assemblies: List[Dict[str, Any]]) -> bool:
+        """
+        Update casing assemblies and their components in the XML.
+        
+        Args:
+            well_id: Well ID
+            wellbore_id: Wellbore ID
+            assemblies: List of assembly data
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        return update_casing_assemblies(self.root, well_id, wellbore_id, assemblies)
+    
     def update_from_payload(self, payload: Dict[str, Any], add_binary_data: bool = False) -> bool:
         """
         Update the XML template using data from a payload.
@@ -272,6 +288,15 @@ class XMLTemplateEditor:
             
             # Update datum
             update_datum(self.root, payload.get('datum', {}), entity_ids)
+            
+            # Update casing schematics
+            casing_schematics = payload.get('casingSchematics', {})
+            if 'assemblies' in casing_schematics and well_id and wellbore_id:
+                self.update_casing_assemblies(
+                    well_id,
+                    wellbore_id,
+                    casing_schematics['assemblies']
+                )
             
             logger.info("Template update from payload completed successfully")
         

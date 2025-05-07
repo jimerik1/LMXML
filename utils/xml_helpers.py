@@ -122,36 +122,47 @@ def create_or_update_element(parent: ET.Element, tag_name: str,
     set_attributes_ordered(element, attributes)
     return element
 
-def xml_to_string(root: Union[ET.Element, ET._Element], pretty_print: bool = True) -> str:
+def get_xml_string(self) -> str:
     """
-    Convert XML element to string with pretty printing and ensure line breaks between elements.
+    Get the XML as a string with proper formatting.
+    
+    Returns:
+        str: Formatted XML string
+    """
+    from utils.xml_helpers import format_xml_with_line_breaks
+    
+    # Get the XML string
+    xml_string = ET.tostring(self.root, encoding='utf-8', xml_declaration=True).decode('utf-8')
+    
+    # Replace the XML declaration with the standard format including DataServices PI
+    xml_string = xml_string.replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>', 
+                  '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+    
+    # Apply explicit formatting with line breaks
+    xml_string = format_xml_with_line_breaks(xml_string)
+    
+    return xml_string
+
+def format_xml_with_line_breaks(xml_string: str) -> str:
+    """
+    Force line breaks after each XML tag, regardless of pretty_print setting.
     
     Args:
-        root: Root XML element
-        pretty_print: Whether to format with pretty printing
+        xml_string: Input XML string
         
     Returns:
-        str: XML string
+        str: XML string with line breaks after each tag
     """
-    # For ElementTree elements
-    xml_str = ET.tostring(
-        root, 
-        encoding='utf-8', 
-        xml_declaration=True,
-        pretty_print=pretty_print
-    ).decode('utf-8')
+    # Add line break after each closing tag
+    xml_string = xml_string.replace('><', '>\n<')
     
-    # Apply line breaks between elements (even if pretty_print didn't work)
-    xml_str = re.sub(r'><', '>\n<', xml_str)
+    # Add line breaks after self-closing tags
+    xml_string = xml_string.replace('/>', '/>\n')
     
-    # Fix XML declaration if needed
-    if '<?DataServices' not in xml_str:
-        xml_str = xml_str.replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>', 
-            '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
-        xml_str = xml_str.replace('<?xml version="1.0" encoding="utf-8"?>', 
-            '<?xml version="1.0" standalone="no"?>\n<?DataServices DB_Major_Version=14;DB_Minor_Version=00;DB_Build_Version=000;DB_Version=EDM 5000.14.0 (14.00.00.000);expandPoint=CD_SCENARIO;?>')
+    # Ensure proper line break after xml declaration
+    xml_string = xml_string.replace('?>', '?>\n')
     
-    return xml_str
+    return xml_string
 
 def format_timestamp(date_str: str) -> Optional[str]:
     """
